@@ -1,5 +1,5 @@
 import { DataTypes, Model } from 'sequelize';
-import sequelize from '../config/database.js';
+import sequelize from '../config/database';
 import Participant from './Participant';
 import Event from './Event';
 import CouponRate from './CouponRate';

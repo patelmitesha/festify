@@ -1,12 +1,12 @@
 import { Router } from 'express';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken } from '../middleware/auth';
 import {
   createEvent,
   getUserEvents,
   getEventDetails,
   updateEvent,
   deleteEvent
-} from '../controllers/eventController.js';
+} from '../controllers/eventController';
 
 const router = Router();
 

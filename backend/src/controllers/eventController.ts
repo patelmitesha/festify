@@ -1,6 +1,6 @@
 import { Response } from 'express';
-import { Event, CouponRate, MealChoice, Participant, Coupon } from '../models/index.js';
-import { AuthenticatedRequest } from '../middleware/auth.js';
+import { Event, CouponRate, MealChoice, Participant, Coupon } from '../models/index';
+import { AuthenticatedRequest } from '../middleware/auth';
 
 export const createEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
