@@ -70,7 +70,7 @@ export const getUserEvents = async (req: AuthenticatedRequest, res: Response): P
       order: [['created_at', 'DESC']]
     });
 
-    res.json({ events });
+    res.json(events);
   } catch (error) {
     console.error('Get user events error:', error);
     res.status(500).json({ error: 'Internal server error' });

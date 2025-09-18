@@ -9,6 +9,7 @@ import CreateEvent from './pages/CreateEvent';
 import EventDetails from './pages/EventDetails';
 import ParticipantManagement from './pages/ParticipantManagement';
 import CouponManagement from './pages/CouponManagement';
+import CouponRedemption from './pages/CouponRedemption';
 import EventReports from './pages/EventReports';
 
 function App() {
@@ -56,6 +57,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <CouponManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/events/:eventId/redeem"
+              element={
+                <ProtectedRoute>
+                  <CouponRedemption />
                 </ProtectedRoute>
               }
             />

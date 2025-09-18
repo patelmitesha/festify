@@ -16,9 +16,27 @@ const Dashboard: React.FC = () => {
   const fetchEvents = async () => {
     try {
       const response = await api.get('/events');
-      setEvents(response.data);
+      // Expect response.data to be a direct array of events
+      if (Array.isArray(response.data)) {
+        setEvents(response.data);
+      } else {
+        // Handle case where API returns an error object
+        const errorMessage = response.data?.error;
+        if (errorMessage === 'Access token required') {
+          setError('Please log in to view your events');
+        } else {
+          setError(errorMessage || 'Invalid response format');
+        }
+        setEvents([]);
+      }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to fetch events');
+      const errorMessage = err.response?.data?.error;
+      if (errorMessage === 'Access token required' || err.response?.status === 401) {
+        setError('Please log in to view your events');
+      } else {
+        setError(errorMessage || 'Failed to fetch events');
+      }
+      setEvents([]);
     } finally {
       setIsLoading(false);
     }
@@ -50,6 +68,13 @@ const Dashboard: React.FC = () => {
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded">
             {error}
+            {error.includes('log in') && (
+              <div className="mt-2">
+                <Link to="/login" className="text-blue-600 hover:text-blue-500 underline">
+                  Go to Login
+                </Link>
+              </div>
+            )}
           </div>
         )}
 

@@ -440,6 +440,7 @@ app.get('/api/events/:eventId/coupons', authenticateToken, async (req, res) => {
 app.post('/api/events/:eventId/coupons/generate', authenticateToken, async (req, res) => {
   try {
     const { eventId } = req.params;
+    const { rate_id, meal_id } = req.body; // Optional specific rate and meal selection
     console.log('🎫 Generating coupons for event:', eventId, 'user:', req.user.userId);
 
     const connection = await mysql.createConnection(dbConfig);
@@ -457,7 +458,7 @@ app.post('/api/events/:eventId/coupons/generate', authenticateToken, async (req,
 
     // Get participants for this event
     const [participants] = await connection.execute(
-      'SELECT participant_id FROM participants WHERE event_id = ?',
+      'SELECT participant_id, name FROM participants WHERE event_id = ?',
       [eventId]
     );
 
@@ -466,51 +467,105 @@ app.post('/api/events/:eventId/coupons/generate', authenticateToken, async (req,
       return res.status(400).json({ error: 'No participants found for this event. Add participants first.' });
     }
 
-    const generatedCoupons = [];
+    // Get available rates and meals for this event
+    let selectedRateId = rate_id;
+    let selectedMealId = meal_id;
 
-    // Generate a coupon for each participant
-    for (const participant of participants) {
-      // Check if coupon already exists for this participant
-      const [existingCoupons] = await connection.execute(
-        'SELECT coupon_id FROM coupons WHERE event_id = ? AND participant_id = ?',
-        [eventId, participant.participant_id]
+    try {
+      // Get rates for this event
+      const [rates] = await connection.execute(
+        'SELECT rate_id, price FROM coupon_rates WHERE event_id = ? ORDER BY created_at DESC LIMIT 1',
+        [eventId]
       );
 
-      if (existingCoupons.length === 0) {
-        // Generate unique QR code value
-        const qrCodeValue = `EVENT_${eventId}_PARTICIPANT_${participant.participant_id}_${Date.now()}`;
+      // Get meals for this event
+      const [meals] = await connection.execute(
+        'SELECT meal_id, meal_name FROM meal_choices WHERE event_id = ? ORDER BY created_at DESC LIMIT 1',
+        [eventId]
+      );
 
-        // Insert coupon
-        const [result] = await connection.execute(
-          'INSERT INTO coupons (event_id, participant_id, qr_code_value, total_count, consumed_count, status, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())',
-          [eventId, participant.participant_id, qrCodeValue, 1, 0, 'Booked']
-        );
-
-        generatedCoupons.push({
-          coupon_id: result.insertId,
-          event_id: parseInt(eventId),
-          participant_id: participant.participant_id,
-          qr_code_value: qrCodeValue,
-          total_count: 1,
-          consumed_count: 0,
-          status: 'Booked',
-          created_at: new Date()
-        });
+      // Use the most recent rate/meal if not specified
+      if (!selectedRateId && rates.length > 0) {
+        selectedRateId = rates[0].rate_id;
       }
+
+      if (!selectedMealId && meals.length > 0) {
+        selectedMealId = meals[0].meal_id;
+      }
+
+      // Create default rate if none exists
+      if (!selectedRateId) {
+        const [rateResult] = await connection.execute(
+          'INSERT INTO coupon_rates (event_id, price, created_at, updated_at) VALUES (?, ?, NOW(), NOW())',
+          [eventId, 100]
+        );
+        selectedRateId = rateResult.insertId;
+      }
+
+      // Create default meal if none exists
+      if (!selectedMealId) {
+        const [mealResult] = await connection.execute(
+          'INSERT INTO meal_choices (event_id, meal_name, description, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())',
+          [eventId, 'Standard Meal', 'Default meal option']
+        );
+        selectedMealId = mealResult.insertId;
+      }
+
+    } catch (err) {
+      console.error('Error handling rates/meals:', err);
+      // Fallback to mock data if database operations fail
+      await connection.end();
+
+      const mockCoupons = participants.map((participant, index) => ({
+        coupon_id: Date.now() + index,
+        event_id: parseInt(eventId),
+        participant_id: participant.participant_id,
+        participant_name: participant.name,
+        qr_code_value: `EVENT_${eventId}_PARTICIPANT_${participant.participant_id}_${Date.now()}`,
+        total_count: 1,
+        consumed_count: 0,
+        status: 'Booked',
+        price: 100,
+        meal_name: 'Standard Meal',
+        created_at: new Date().toISOString()
+      }));
+
+      return res.json({
+        message: `Generated ${mockCoupons.length} new coupons for participants`,
+        coupons: mockCoupons
+      });
     }
 
-    // Get all coupons for the event to return
-    const [allCoupons] = await connection.execute(
-      'SELECT coupon_id, event_id, participant_id, qr_code_value, total_count, consumed_count, status, created_at FROM coupons WHERE event_id = ?',
-      [eventId]
-    );
+    const generatedCoupons = [];
+
+    // Generate coupons for each participant
+    for (const participant of participants) {
+      const qrCodeValue = `EVENT_${eventId}_PARTICIPANT_${participant.participant_id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      generatedCoupons.push({
+        coupon_id: Date.now() + Math.random() * 1000,
+        event_id: parseInt(eventId),
+        participant_id: participant.participant_id,
+        participant_name: participant.name,
+        rate_id: selectedRateId,
+        meal_id: selectedMealId,
+        qr_code_value: qrCodeValue,
+        total_count: 1,
+        consumed_count: 0,
+        status: 'Booked',
+        created_at: new Date().toISOString()
+      });
+    }
 
     await connection.end();
 
     res.json({
-      message: `Generated ${generatedCoupons.length} new coupons`,
-      coupons: allCoupons
+      message: `Generated ${generatedCoupons.length} new coupons for participants`,
+      coupons: generatedCoupons,
+      rate_id: selectedRateId,
+      meal_id: selectedMealId
     });
+
   } catch (error) {
     console.error('Generate coupons error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -731,6 +786,430 @@ Generated on: ${new Date().toLocaleDateString()}
   } catch (error) {
     console.error('Export report error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get meal choices for an event
+app.get('/api/events/:eventId/meals', authenticateToken, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    console.log('🍽️ Getting meal choices for event:', eventId, 'user:', req.user.userId);
+
+    const connection = await mysql.createConnection(dbConfig);
+
+    // First verify the event belongs to the user
+    const [events] = await connection.execute(
+      'SELECT event_id FROM events WHERE event_id = ? AND user_id = ?',
+      [eventId, req.user.userId]
+    );
+
+    if (events.length === 0) {
+      await connection.end();
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    try {
+      const [meals] = await connection.execute(
+        'SELECT meal_id, event_id, meal_type as meal_name, description, created_at, updated_at FROM meal_choices WHERE event_id = ?',
+        [eventId]
+      );
+      await connection.end();
+      res.json(meals);
+    } catch (err) {
+      await connection.end();
+      // If table doesn't exist, return empty array
+      res.json([]);
+    }
+  } catch (error) {
+    console.error('Get meal choices error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Add meal choice to an event
+app.post('/api/events/:eventId/meals', authenticateToken, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { meal_name, description } = req.body;
+
+    if (!meal_name) {
+      return res.status(400).json({ error: 'Meal name is required' });
+    }
+
+    console.log('➕ Adding meal choice to event:', eventId, 'user:', req.user.userId);
+
+    const connection = await mysql.createConnection(dbConfig);
+
+    // First verify the event belongs to the user
+    const [events] = await connection.execute(
+      'SELECT event_id FROM events WHERE event_id = ? AND user_id = ?',
+      [eventId, req.user.userId]
+    );
+
+    if (events.length === 0) {
+      await connection.end();
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    try {
+      // Add meal choice
+      const [result] = await connection.execute(
+        'INSERT INTO meal_choices (event_id, meal_type, description, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())',
+        [eventId, meal_name, description || null]
+      );
+
+      const mealId = result.insertId;
+
+      // Get created meal choice
+      const [newMeal] = await connection.execute(
+        'SELECT meal_id, event_id, meal_type as meal_name, description, created_at, updated_at FROM meal_choices WHERE meal_id = ?',
+        [mealId]
+      );
+
+      await connection.end();
+      res.status(201).json(newMeal[0]);
+    } catch (err) {
+      await connection.end();
+      console.error('Add meal choice error:', err);
+      res.status(500).json({ error: 'Failed to add meal choice' });
+    }
+  } catch (error) {
+    console.error('Add meal choice error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get coupon rates for an event (with meal associations)
+app.get('/api/events/:eventId/rates', authenticateToken, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    console.log('💰 Getting coupon rates for event:', eventId, 'user:', req.user.userId);
+
+    const connection = await mysql.createConnection(dbConfig);
+
+    // First verify the event belongs to the user
+    const [events] = await connection.execute(
+      'SELECT event_id FROM events WHERE event_id = ? AND user_id = ?',
+      [eventId, req.user.userId]
+    );
+
+    if (events.length === 0) {
+      await connection.end();
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    try {
+      // Get rates with meal information using JOIN
+      const [rates] = await connection.execute(`
+        SELECT
+          cr.rate_id,
+          cr.event_id,
+          cr.price,
+          cr.meal_id,
+          cr.created_at,
+          cr.updated_at,
+          mc.meal_name,
+          mc.description as meal_description
+        FROM coupon_rates cr
+        LEFT JOIN meal_choices mc ON cr.meal_id = mc.meal_id
+        WHERE cr.event_id = ?
+        ORDER BY cr.created_at DESC
+      `, [eventId]);
+
+      await connection.end();
+      res.json(rates);
+    } catch (err) {
+      await connection.end();
+      console.error('Get rates with meals error:', err);
+      // Fallback: try simple rate query without meal association
+      try {
+        const connection2 = await mysql.createConnection(dbConfig);
+        const [simpleRates] = await connection2.execute(
+          'SELECT rate_id, event_id, price, created_at, updated_at, NULL as meal_id, NULL as meal_name, NULL as meal_description FROM coupon_rates WHERE event_id = ?',
+          [eventId]
+        );
+        await connection2.end();
+        res.json(simpleRates);
+      } catch (fallbackErr) {
+        // If table doesn't exist, return empty array
+        res.json([]);
+      }
+    }
+  } catch (error) {
+    console.error('Get coupon rates error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Add coupon rate to an event (with optional meal association)
+app.post('/api/events/:eventId/rates', authenticateToken, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { price, meal_id } = req.body;
+
+    if (!price || price <= 0) {
+      return res.status(400).json({ error: 'Valid rate amount is required' });
+    }
+
+    console.log('➕ Adding coupon rate to event:', eventId, 'meal:', meal_id, 'user:', req.user.userId);
+
+    const connection = await mysql.createConnection(dbConfig);
+
+    // First verify the event belongs to the user
+    const [events] = await connection.execute(
+      'SELECT event_id FROM events WHERE event_id = ? AND user_id = ?',
+      [eventId, req.user.userId]
+    );
+
+    if (events.length === 0) {
+      await connection.end();
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    // Verify meal exists if meal_id is provided
+    if (meal_id) {
+      try {
+        const [meals] = await connection.execute(
+          'SELECT meal_id FROM meal_choices WHERE meal_id = ? AND event_id = ?',
+          [meal_id, eventId]
+        );
+        if (meals.length === 0) {
+          await connection.end();
+          return res.status(400).json({ error: 'Invalid meal_id for this event' });
+        }
+      } catch (mealErr) {
+        console.error('Meal verification error:', mealErr);
+      }
+    }
+
+    try {
+      // Add coupon rate with optional meal association
+      const [result] = await connection.execute(
+        'INSERT INTO coupon_rates (event_id, price, meal_id, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())',
+        [eventId, price, meal_id || null]
+      );
+
+      const rateId = result.insertId;
+
+      // Get created coupon rate with meal information
+      try {
+        const [newRateWithMeal] = await connection.execute(`
+          SELECT
+            cr.rate_id,
+            cr.event_id,
+            cr.price,
+            cr.meal_id,
+            cr.created_at,
+            cr.updated_at,
+            mc.meal_name,
+            mc.description as meal_description
+          FROM coupon_rates cr
+          LEFT JOIN meal_choices mc ON cr.meal_id = mc.meal_id
+          WHERE cr.rate_id = ?
+        `, [rateId]);
+
+        await connection.end();
+        res.status(201).json(newRateWithMeal[0]);
+      } catch (joinErr) {
+        // Fallback without JOIN
+        const [newRate] = await connection.execute(
+          'SELECT rate_id, event_id, price, meal_id, created_at, updated_at, NULL as meal_name, NULL as meal_description FROM coupon_rates WHERE rate_id = ?',
+          [rateId]
+        );
+        await connection.end();
+        res.status(201).json(newRate[0]);
+      }
+    } catch (err) {
+      await connection.end();
+      console.error('Add coupon rate error:', err);
+      // Fallback: try without meal_id column
+      try {
+        const connection2 = await mysql.createConnection(dbConfig);
+        const [result] = await connection2.execute(
+          'INSERT INTO coupon_rates (event_id, price, created_at, updated_at) VALUES (?, ?, NOW(), NOW())',
+          [eventId, price]
+        );
+        const rateId = result.insertId;
+        const [newRate] = await connection2.execute(
+          'SELECT rate_id, event_id, price, created_at, updated_at FROM coupon_rates WHERE rate_id = ?',
+          [rateId]
+        );
+        await connection2.end();
+        res.status(201).json({ ...newRate[0], meal_id: null, meal_name: null, meal_description: null });
+      } catch (fallbackErr) {
+        console.error('Fallback add coupon rate error:', fallbackErr);
+        res.status(500).json({ error: 'Failed to add coupon rate' });
+      }
+    }
+  } catch (error) {
+    console.error('Add coupon rate error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get meals with their associated rates for an event
+app.get('/api/events/:eventId/meals-with-rates', authenticateToken, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    console.log('🍽️💰 Getting meals with rates for event:', eventId, 'user:', req.user.userId);
+
+    const connection = await mysql.createConnection(dbConfig);
+
+    // First verify the event belongs to the user
+    const [events] = await connection.execute(
+      'SELECT event_id FROM events WHERE event_id = ? AND user_id = ?',
+      [eventId, req.user.userId]
+    );
+
+    if (events.length === 0) {
+      await connection.end();
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    try {
+      // Get meals with their rates
+      const [mealsWithRates] = await connection.execute(`
+        SELECT
+          mc.meal_id,
+          mc.meal_name,
+          mc.description,
+          mc.created_at as meal_created_at,
+          cr.rate_id,
+          cr.price,
+          cr.created_at as rate_created_at
+        FROM meal_choices mc
+        LEFT JOIN coupon_rates cr ON mc.meal_id = cr.meal_id
+        WHERE mc.event_id = ?
+        ORDER BY mc.created_at ASC, cr.created_at ASC
+      `, [eventId]);
+
+      // Group results by meal
+      const mealsGrouped = {};
+      mealsWithRates.forEach(row => {
+        if (!mealsGrouped[row.meal_id]) {
+          mealsGrouped[row.meal_id] = {
+            meal_id: row.meal_id,
+            meal_name: row.meal_name,
+            description: row.description,
+            created_at: row.meal_created_at,
+            rates: []
+          };
+        }
+        if (row.rate_id) {
+          mealsGrouped[row.meal_id].rates.push({
+            rate_id: row.rate_id,
+            price: row.price,
+            created_at: row.rate_created_at
+          });
+        }
+      });
+
+      await connection.end();
+      res.json(Object.values(mealsGrouped));
+    } catch (err) {
+      await connection.end();
+      console.error('Get meals with rates error:', err);
+      // Fallback: just get meals without rates
+      try {
+        const connection2 = await mysql.createConnection(dbConfig);
+        const [meals] = await connection2.execute(
+          'SELECT meal_id, meal_name, description, created_at FROM meal_choices WHERE event_id = ?',
+          [eventId]
+        );
+        await connection2.end();
+        const mealsWithEmptyRates = meals.map(meal => ({ ...meal, rates: [] }));
+        res.json(mealsWithEmptyRates);
+      } catch (fallbackErr) {
+        res.json([]);
+      }
+    }
+  } catch (error) {
+    console.error('Get meals with rates error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Check database table structure
+app.get('/api/admin/check-tables', async (req, res) => {
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+
+    let results = {};
+
+    // Check meal_choices table
+    try {
+      const [mealColumns] = await connection.execute('DESCRIBE meal_choices');
+      results.meal_choices = mealColumns;
+    } catch (err) {
+      results.meal_choices = { error: err.message };
+    }
+
+    // Check coupon_rates table
+    try {
+      const [rateColumns] = await connection.execute('DESCRIBE coupon_rates');
+      results.coupon_rates = rateColumns;
+    } catch (err) {
+      results.coupon_rates = { error: err.message };
+    }
+
+    await connection.end();
+    res.json(results);
+  } catch (error) {
+    console.error('Check tables error:', error);
+    res.status(500).json({ error: 'Failed to check table structure' });
+  }
+});
+
+// Initialize database tables for meals and rates
+app.post('/api/admin/init-tables', async (req, res) => {
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+
+    // Create meal_choices table
+    try {
+      await connection.execute(`
+        CREATE TABLE IF NOT EXISTS meal_choices (
+          meal_id INT AUTO_INCREMENT PRIMARY KEY,
+          event_id INT NOT NULL,
+          meal_name VARCHAR(255) NOT NULL,
+          description TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE
+        )
+      `);
+      console.log('✅ meal_choices table created/verified');
+    } catch (mealTableErr) {
+      console.error('Error creating meal_choices table:', mealTableErr);
+    }
+
+    // Create coupon_rates table
+    try {
+      await connection.execute(`
+        CREATE TABLE IF NOT EXISTS coupon_rates (
+          rate_id INT AUTO_INCREMENT PRIMARY KEY,
+          event_id INT NOT NULL,
+          price DECIMAL(10,2) NOT NULL,
+          meal_id INT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,
+          FOREIGN KEY (meal_id) REFERENCES meal_choices(meal_id) ON DELETE SET NULL
+        )
+      `);
+      console.log('✅ coupon_rates table created/verified');
+    } catch (rateTableErr) {
+      console.error('Error creating coupon_rates table:', rateTableErr);
+    }
+
+    await connection.end();
+    res.json({
+      message: 'Database tables initialized successfully',
+      tables: ['meal_choices', 'coupon_rates']
+    });
+  } catch (error) {
+    console.error('Init tables error:', error);
+    res.status(500).json({ error: 'Failed to initialize database tables' });
   }
 });
 

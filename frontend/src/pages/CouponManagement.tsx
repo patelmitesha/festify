@@ -20,14 +20,14 @@ const CouponManagement: React.FC = () => {
   const fetchEventAndCoupons = async () => {
     try {
       setIsLoading(true);
-      // Fetch event details first
+      // Fetch event details with meal choices and coupon rates
       const eventResponse = await api.get(`/events/${eventId}`);
-      setEvent(eventResponse.data);
+      setEvent(eventResponse.data.event);
 
       // Fetch coupons
       try {
-        const couponsResponse = await api.get(`/events/${eventId}/coupons`);
-        setCoupons(couponsResponse.data);
+        const couponsResponse = await api.get(`/coupons/events/${eventId}`);
+        setCoupons(couponsResponse.data.coupons);
       } catch (couponsErr: any) {
         // If coupons endpoint doesn't exist, set empty array
         if (couponsErr.response?.status === 404) {
@@ -37,27 +37,15 @@ const CouponManagement: React.FC = () => {
         }
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to fetch event or coupons');
+      setError(err.response?.data?.error || 'Failed to fetch event data');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const generateCoupons = async () => {
-    if (!eventId) return;
-
+  const downloadCouponPDF = async (couponId: number, participantId: number) => {
     try {
-      const response = await api.post(`/events/${eventId}/coupons/generate`);
-      setCoupons(response.data.coupons);
-      setError('');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to generate coupons');
-    }
-  };
-
-  const downloadCouponPDF = async (couponId: number) => {
-    try {
-      const response = await api.get(`/coupons/${couponId}/pdf`, {
+      const response = await api.get(`/coupons/events/${eventId}/pdf/${participantId}`, {
         responseType: 'blob'
       });
 
@@ -73,6 +61,8 @@ const CouponManagement: React.FC = () => {
       setError('Failed to download coupon PDF');
     }
   };
+
+  // Note: Bulk PDF download not implemented in backend yet
 
   if (isLoading) {
     return (
@@ -105,17 +95,19 @@ const CouponManagement: React.FC = () => {
       <div className="space-y-6">
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Coupons</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Event Coupons</h1>
             <p className="text-gray-600 mt-1">
-              {event?.name} - Manage event coupons and QR codes
+              {event?.name} - View and manage generated coupons
             </p>
           </div>
-          <button
-            onClick={generateCoupons}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-          >
-            Generate Coupons
-          </button>
+          <div className="flex space-x-3">
+            <Link
+              to={`/events/${eventId}/participants`}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Add Participants
+            </Link>
+          </div>
         </div>
 
         {error && (
@@ -124,31 +116,78 @@ const CouponManagement: React.FC = () => {
           </div>
         )}
 
-        {/* Event Summary */}
+        {/* Event Configuration Summary */}
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Event Summary</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{coupons.length}</div>
-              <div className="text-sm text-gray-500">Total Coupons</div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Event Configuration</h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Meal Choices */}
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 mb-3">🍽️ Available Meal Options</h3>
+              {event?.MealChoices && event.MealChoices.length > 0 ? (
+                <div className="space-y-2">
+                  {event.MealChoices.map((meal) => (
+                    <div key={meal.meal_id} className="flex items-center p-2 bg-gray-50 rounded">
+                      <span className="text-gray-900">{meal.meal_type}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-gray-500 italic">No meal options configured</div>
+              )}
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">
+
+            {/* Coupon Rates */}
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 mb-3">💰 Pricing Structure</h3>
+              {event?.CouponRates && event.CouponRates.length > 0 ? (
+                <div className="space-y-2">
+                  {event.CouponRates.map((rate) => (
+                    <div key={rate.rate_id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <span className="text-gray-900">{rate.rate_type}</span>
+                      <span className="font-medium text-green-600">₹{rate.price}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-gray-500 italic">No pricing rates configured</div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+            <p className="text-sm text-blue-700">
+              <strong>Note:</strong> Meal options and pricing are configured during event creation.
+              To modify these, you can edit the event details or create a new event.
+            </p>
+          </div>
+        </div>
+
+        {/* Coupon Statistics */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Coupon Statistics</h2>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="text-center p-4 bg-blue-50 rounded-lg">
+              <div className="text-3xl font-bold text-blue-600">{coupons.length}</div>
+              <div className="text-sm text-blue-700 font-medium">Total Coupons</div>
+            </div>
+            <div className="text-center p-4 bg-green-50 rounded-lg">
+              <div className="text-3xl font-bold text-green-600">
                 {coupons.filter(c => c.status === 'Booked').length}
               </div>
-              <div className="text-sm text-gray-500">Booked</div>
+              <div className="text-sm text-green-700 font-medium">Available</div>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-orange-600">
+            <div className="text-center p-4 bg-yellow-50 rounded-lg">
+              <div className="text-3xl font-bold text-yellow-600">
                 {coupons.filter(c => c.status === 'Partial').length}
               </div>
-              <div className="text-sm text-gray-500">Partial</div>
+              <div className="text-sm text-yellow-700 font-medium">Partially Used</div>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-red-600">
+            <div className="text-center p-4 bg-red-50 rounded-lg">
+              <div className="text-3xl font-bold text-red-600">
                 {coupons.filter(c => c.status === 'Consumed').length}
               </div>
-              <div className="text-sm text-gray-500">Consumed</div>
+              <div className="text-sm text-red-700 font-medium">Fully Used</div>
             </div>
           </div>
         </div>
@@ -157,21 +196,21 @@ const CouponManagement: React.FC = () => {
         <div className="bg-white rounded-lg shadow">
           <div className="p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              Coupons ({coupons.length})
+              Generated Coupons ({coupons.length})
             </h2>
 
             {coupons.length === 0 ? (
-              <div className="text-center py-8">
+              <div className="text-center py-12">
                 <div className="text-gray-500 text-lg mb-4">No coupons generated yet</div>
-                <p className="text-gray-600 mb-4">
-                  Generate coupons for participants who have been added to this event
+                <p className="text-gray-600 mb-6">
+                  Coupons are automatically generated when participants are added to the event with their meal and rate selections.
                 </p>
-                <button
-                  onClick={generateCoupons}
-                  className="text-blue-600 hover:text-blue-500 font-medium"
+                <Link
+                  to={`/events/${eventId}/participants`}
+                  className="inline-block px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
                 >
-                  Generate Coupons Now
-                </button>
+                  Add Participants to Generate Coupons
+                </Link>
               </div>
             ) : (
               <div className="space-y-4">
@@ -187,11 +226,11 @@ const CouponManagement: React.FC = () => {
                             Coupon #{coupon.coupon_id}
                           </h3>
                           <span
-                            className={`px-2 py-1 text-xs rounded-full ${
+                            className={`px-2 py-1 text-xs rounded-full font-medium ${
                               coupon.status === 'Booked'
                                 ? 'bg-green-100 text-green-800'
                                 : coupon.status === 'Partial'
-                                ? 'bg-orange-100 text-orange-800'
+                                ? 'bg-yellow-100 text-yellow-800'
                                 : 'bg-red-100 text-red-800'
                             }`}
                           >
@@ -199,40 +238,73 @@ const CouponManagement: React.FC = () => {
                           </span>
                         </div>
 
+                        {/* Coupon Details */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                          <div className="p-3 bg-blue-50 rounded-lg">
+                            <div className="text-sm font-medium text-blue-700">Participant</div>
+                            <div className="text-blue-900">{coupon.Participant?.name || 'Unknown'}</div>
+                          </div>
+                          <div className="p-3 bg-green-50 rounded-lg">
+                            <div className="text-sm font-medium text-green-700">Meal Option</div>
+                            <div className="text-green-900">{coupon.MealChoice?.meal_type || 'Not specified'}</div>
+                          </div>
+                          <div className="p-3 bg-purple-50 rounded-lg">
+                            <div className="text-sm font-medium text-purple-700">Rate & Price</div>
+                            <div className="text-purple-900">
+                              {coupon.CouponRate?.rate_type || 'Unknown'} - ₹{coupon.CouponRate?.price || 0}
+                            </div>
+                          </div>
+                        </div>
+
                         <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
                           <div>
-                            <span className="font-medium">QR Code:</span> {coupon.qr_code_value}
+                            <span className="font-medium">QR Code:</span>
+                            <div className="truncate text-xs mt-1 font-mono bg-gray-100 px-2 py-1 rounded">
+                              {coupon.qr_code_value}
+                            </div>
                           </div>
                           <div>
-                            <span className="font-medium">Total Count:</span> {coupon.total_count}
-                          </div>
-                          <div>
-                            <span className="font-medium">Consumed:</span> {coupon.consumed_count}
-                          </div>
-                          <div>
-                            <span className="font-medium">Remaining:</span> {coupon.total_count - coupon.consumed_count}
+                            <span className="font-medium">Usage:</span>
+                            <div className="text-xs mt-1">
+                              <span className={`font-medium ${
+                                coupon.consumed_count === 0 ? 'text-green-600' :
+                                coupon.consumed_count === coupon.total_count ? 'text-red-600' :
+                                'text-yellow-600'
+                              }`}>
+                                {coupon.consumed_count} / {coupon.total_count} used
+                              </span>
+                            </div>
                           </div>
                         </div>
 
                         <p className="text-xs text-gray-500 mt-2">
-                          Created: {new Date(coupon.created_at).toLocaleDateString()}
+                          Created: {new Date(coupon.created_at).toLocaleDateString()} at {new Date(coupon.created_at).toLocaleTimeString()}
                         </p>
                       </div>
 
                       <div className="flex flex-col space-y-2 ml-4">
                         <button
-                          onClick={() => downloadCouponPDF(coupon.coupon_id)}
+                          onClick={() => downloadCouponPDF(coupon.coupon_id, coupon.participant_id)}
                           className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
                         >
-                          Download PDF
+                          📄 Download PDF
                         </button>
 
                         <button
                           onClick={() => navigator.clipboard.writeText(coupon.qr_code_value)}
                           className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
                         >
-                          Copy QR Code
+                          📋 Copy QR Code
                         </button>
+
+                        {coupon.qr_code_link && (
+                          <button
+                            onClick={() => window.open(coupon.qr_code_link, '_blank')}
+                            className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
+                          >
+                            🔗 View QR Link
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

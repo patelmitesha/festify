@@ -21,8 +21,11 @@ export const addParticipant = async (req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    if (!name || !coupon_bookings || coupon_bookings.length === 0) {
-      res.status(400).json({ error: 'Name and coupon bookings are required' });
+    if (!name ) {
+      res.status(400).json({
+        error: 'Name and coupon bookings are required',
+        
+      });
       return;
     }
 
@@ -105,7 +108,7 @@ export const getEventParticipants = async (req: AuthenticatedRequest, res: Respo
       order: [['name', 'ASC']]
     });
 
-    res.json({ participants });
+    res.json(participants);
   } catch (error) {
     console.error('Get participants error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -202,6 +205,53 @@ export const deleteParticipant = async (req: AuthenticatedRequest, res: Response
     res.json({ message: 'Participant deleted successfully' });
   } catch (error) {
     console.error('Delete participant error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const searchParticipantsByPhone = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { eventId } = req.params;
+    const { phone } = req.query;
+    const user_id = req.user.user_id;
+
+    if (!phone) {
+      res.status(400).json({ error: 'Phone number is required' });
+      return;
+    }
+
+    const event = await Event.findOne({
+      where: {
+        event_id: eventId,
+        user_id
+      }
+    });
+
+    if (!event) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+
+    const participants = await Participant.findAll({
+      where: {
+        event_id: eventId,
+        contact_number: {
+          [require('sequelize').Op.like]: `%${phone}%`
+        }
+      },
+      include: [{
+        model: Coupon,
+        include: [
+          { model: CouponRate },
+          { model: MealChoice }
+        ]
+      }],
+      order: [['name', 'ASC']]
+    });
+
+    res.json(participants);
+  } catch (error) {
+    console.error('Search participants error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

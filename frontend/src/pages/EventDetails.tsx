@@ -15,12 +15,13 @@ const EventDetails: React.FC = () => {
     if (eventId) {
       fetchEvent();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
 
   const fetchEvent = async () => {
     try {
       const response = await api.get(`/events/${eventId}`);
-      setEvent(response.data);
+      setEvent(response.data.event);
     } catch (err: any) {
       if (err.response?.status === 404) {
         setError('Event not found');
@@ -161,7 +162,7 @@ const EventDetails: React.FC = () => {
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Link
               to={`/events/${event.event_id}/participants`}
               className="p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:shadow-md transition-all"
@@ -176,6 +177,14 @@ const EventDetails: React.FC = () => {
             >
               <div className="text-lg font-medium text-gray-900 mb-2">🎫 Coupons</div>
               <div className="text-gray-600 text-sm">Generate and manage event coupons</div>
+            </Link>
+
+            <Link
+              to={`/events/${event.event_id}/redeem`}
+              className="p-4 border border-gray-200 rounded-lg hover:border-orange-500 hover:shadow-md transition-all"
+            >
+              <div className="text-lg font-medium text-gray-900 mb-2">🎯 Redeem Coupons</div>
+              <div className="text-gray-600 text-sm">Scan QR codes or search participants to redeem coupons</div>
             </Link>
 
             <Link

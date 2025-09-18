@@ -127,9 +127,12 @@ export const exportEventReport = async (req: AuthenticatedRequest, res: Response
       doc.moveDown();
 
       coupons.forEach((coupon, index) => {
-        doc.text(`${index + 1}. ${coupon.Participant.name}`);
-        doc.text(`   Meal: ${coupon.MealChoice.meal_type}`);
-        doc.text(`   Type: ${coupon.CouponRate.rate_type} (₹${coupon.CouponRate.price})`);
+        // @ts-ignore
+        doc.text(`${index + 1}. ${coupon.Participant?.name}`);
+        // @ts-ignore
+        doc.text(`   Meal: ${coupon.MealChoice?.meal_type}`);
+        // @ts-ignore
+        doc.text(`   Type: ${coupon.CouponRate?.rate_type} (₹${coupon.CouponRate?.price})`);
         doc.text(`   Status: ${coupon.status} (${coupon.consumed_count}/${coupon.total_count})`);
         doc.text(`   QR Code: ${coupon.qr_code_value}`);
         doc.moveDown(0.5);
@@ -143,12 +146,18 @@ export const exportEventReport = async (req: AuthenticatedRequest, res: Response
 
       coupons.forEach(coupon => {
         csvData.push([
-          coupon.Participant.name,
-          coupon.Participant.address || '',
-          coupon.Participant.contact_number || '',
-          coupon.MealChoice.meal_type,
-          coupon.CouponRate.rate_type,
-          coupon.CouponRate.price,
+          // @ts-ignore
+          coupon.Participant?.name,
+          // @ts-ignore
+          coupon.Participant?.address || '',
+          // @ts-ignore
+          coupon.Participant?.contact_number || '',
+          // @ts-ignore
+          coupon.MealChoice?.meal_type,
+          // @ts-ignore
+          coupon.CouponRate?.rate_type,
+          // @ts-ignore
+          coupon.CouponRate?.price,
           coupon.status,
           coupon.consumed_count,
           coupon.total_count,

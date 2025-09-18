@@ -4,13 +4,15 @@ import {
   addParticipant,
   getEventParticipants,
   updateParticipant,
-  deleteParticipant
+  deleteParticipant,
+  searchParticipantsByPhone
 } from '../controllers/participantController';
 
 const router = Router();
 
 router.post('/:eventId/participants', authenticateToken, addParticipant);
 router.get('/:eventId/participants', authenticateToken, getEventParticipants);
+router.get('/:eventId/participants/search', authenticateToken, searchParticipantsByPhone);
 router.put('/:eventId/participants/:participantId', authenticateToken, updateParticipant);
 router.delete('/:eventId/participants/:participantId', authenticateToken, deleteParticipant);
 

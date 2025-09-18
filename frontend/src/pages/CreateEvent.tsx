@@ -12,6 +12,11 @@ const CreateEvent: React.FC = () => {
     start_date: '',
     end_date: ''
   });
+  const [mealChoices, setMealChoices] = useState<string[]>(['']);
+  const [couponRates, setCouponRates] = useState<{rate_type: string, price: string}[]>([
+    { rate_type: 'Member', price: '' },
+    { rate_type: 'Guest', price: '' }
+  ]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -23,13 +28,54 @@ const CreateEvent: React.FC = () => {
     }));
   };
 
+  const handleMealChoiceChange = (index: number, value: string) => {
+    const updatedMealChoices = [...mealChoices];
+    updatedMealChoices[index] = value;
+    setMealChoices(updatedMealChoices);
+  };
+
+  const addMealChoice = () => {
+    setMealChoices([...mealChoices, '']);
+  };
+
+  const removeMealChoice = (index: number) => {
+    if (mealChoices.length > 1) {
+      setMealChoices(mealChoices.filter((_, i) => i !== index));
+    }
+  };
+
+  const handleCouponRateChange = (index: number, field: 'rate_type' | 'price', value: string) => {
+    const updatedRates = [...couponRates];
+    updatedRates[index][field] = value;
+    setCouponRates(updatedRates);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
     try {
-      const response = await api.post('/events', formData);
+      // Prepare meal choices (filter out empty ones)
+      const validMealChoices = mealChoices
+        .filter(meal => meal.trim() !== '')
+        .map(meal_type => ({ meal_type: meal_type.trim() }));
+
+      // Prepare coupon rates (filter out ones with empty prices)
+      const validCouponRates = couponRates
+        .filter(rate => rate.price.trim() !== '')
+        .map(rate => ({
+          rate_type: rate.rate_type,
+          price: parseFloat(rate.price)
+        }));
+
+      const eventData = {
+        ...formData,
+        meal_choices: validMealChoices,
+        coupon_rates: validCouponRates
+      };
+
+      const response = await api.post('/events', eventData);
       console.log('Event created:', response.data);
       navigate('/');
     } catch (err: any) {
@@ -131,6 +177,81 @@ const CreateEvent: React.FC = () => {
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
+              </div>
+            </div>
+
+            {/* Food Options Section */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Food Options
+              </label>
+              <div className="space-y-2">
+                {mealChoices.map((meal, index) => (
+                  <div key={index} className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      value={meal}
+                      onChange={(e) => handleMealChoiceChange(index, e.target.value)}
+                      placeholder={`Food option ${index + 1} (e.g., Lunch, Dinner, Snacks)`}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    {mealChoices.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeMealChoice(index)}
+                        className="px-2 py-2 text-red-600 hover:text-red-800"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addMealChoice}
+                  className="text-blue-600 hover:text-blue-800 text-sm"
+                >
+                  + Add another food option
+                </button>
+              </div>
+            </div>
+
+            {/* Coupon Pricing Section */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Coupon Pricing
+              </label>
+              <div className="space-y-3">
+                {couponRates.map((rate, index) => (
+                  <div key={index} className="flex items-center space-x-3">
+                    <div className="w-24">
+                      <input
+                        type="text"
+                        value={rate.rate_type}
+                        onChange={(e) => handleCouponRateChange(index, 'rate_type', e.target.value)}
+                        placeholder="Type"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <div className="relative">
+                        <span className="absolute left-3 top-2 text-gray-500">₹</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={rate.price}
+                          onChange={(e) => handleCouponRateChange(index, 'price', e.target.value)}
+                          placeholder="0.00"
+                          className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <p className="text-sm text-gray-500">
+                  Set different pricing for different participant types (e.g., Member, Guest)
+                </p>
               </div>
             </div>
 
