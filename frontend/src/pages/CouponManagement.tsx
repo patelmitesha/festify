@@ -45,7 +45,7 @@ const CouponManagement: React.FC = () => {
 
   const downloadCouponPDF = async (couponId: number, participantId: number) => {
     try {
-      const response = await api.get(`/coupons/events/${eventId}/pdf/${participantId}`, {
+      const response = await api.get(`/coupons/pdf/${couponId}`, {
         responseType: 'blob'
       });
 
@@ -53,7 +53,7 @@ const CouponManagement: React.FC = () => {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `coupon-${couponId}.pdf`);
+      link.setAttribute('download', `festify-coupon-${couponId}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -287,14 +287,14 @@ const CouponManagement: React.FC = () => {
                           onClick={() => downloadCouponPDF(coupon.coupon_id, coupon.participant_id)}
                           className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
                         >
-                          📄 Download PDF
+                          Download PDF
                         </button>
 
                         <button
                           onClick={() => navigator.clipboard.writeText(coupon.qr_code_value)}
                           className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
                         >
-                          📋 Copy QR Code
+                          Copy QR Code
                         </button>
 
                         {coupon.qr_code_link && (
@@ -302,7 +302,7 @@ const CouponManagement: React.FC = () => {
                             onClick={() => window.open(coupon.qr_code_link, '_blank')}
                             className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
                           >
-                            🔗 View QR Link
+                            View QR Link
                           </button>
                         )}
                       </div>

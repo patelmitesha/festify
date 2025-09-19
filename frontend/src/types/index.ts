@@ -17,6 +17,13 @@ export interface Event {
   CouponRates?: CouponRate[];
   MealChoices?: MealChoice[];
   Participants?: Participant[];
+  stats?: {
+    totalCoupons: number;
+    redeemedCoupons: number;
+    totalAmount: number;
+    redeemedAmount: number;
+    totalParticipants: number;
+  };
 }
 
 export interface CouponRate {

@@ -10,6 +10,7 @@ import EventDetails from './pages/EventDetails';
 import ParticipantManagement from './pages/ParticipantManagement';
 import CouponManagement from './pages/CouponManagement';
 import CouponRedemption from './pages/CouponRedemption';
+import CouponView from './pages/CouponView';
 import EventReports from './pages/EventReports';
 
 function App() {
@@ -20,6 +21,7 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/coupon/:qrCode" element={<CouponView />} />
             <Route
               path="/"
               element={

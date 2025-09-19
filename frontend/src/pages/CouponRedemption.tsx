@@ -109,12 +109,12 @@ const CouponRedemption: React.FC = () => {
         redeemCount: count
       });
 
-      setSuccess(response.data.message);
+      setSuccess(`Coupon redeemed successfully! ${response.data.message}`);
 
       // Update the coupon in the state
-      if (activeMode === 'qr' && foundCoupon) {
+      if (activeMode === 'qr' && foundCoupon && foundCoupon.coupon_id === coupon.coupon_id) {
         setFoundCoupon(response.data.coupon);
-      } else if (activeMode === 'search' && selectedCoupon) {
+      } else if (activeMode === 'search') {
         // Update the coupon in search results
         setSearchResults(prev =>
           prev.map(participant => ({
@@ -124,7 +124,11 @@ const CouponRedemption: React.FC = () => {
             )
           }))
         );
-        setSelectedCoupon(response.data.coupon);
+
+        // Update selected coupon if it matches
+        if (selectedCoupon && selectedCoupon.coupon_id === coupon.coupon_id) {
+          setSelectedCoupon(response.data.coupon);
+        }
       }
 
       // Reset redeem count
@@ -190,7 +194,6 @@ const CouponRedemption: React.FC = () => {
               const canvas = document.createElement('canvas');
               const ctx = canvas.getContext('2d');
               if (!ctx) {
-                console.error('Failed to get canvas context');
                 return;
               }
 
@@ -209,17 +212,18 @@ const CouponRedemption: React.FC = () => {
                       const scannedCode = result.getText();
                       setQrCode(scannedCode);
                       stopCameraScanning();
+                      setSuccess('QR Code detected successfully!');
                       // Automatically search for the coupon
                       searchCouponByCode(scannedCode);
                     }
                   } catch (err) {
-                    console.log('No QR code found in image');
+                    // Silently continue scanning - no error logging for better UX
                   }
                 }
               };
               scanImg.src = dataURL;
             } catch (err) {
-              console.log('No QR code found in image');
+              // Silently continue scanning
             }
           };
           img.src = imageSrc;
@@ -230,13 +234,13 @@ const CouponRedemption: React.FC = () => {
     }
   }, []);
 
-  // Auto-scan when camera is active
+  // Auto-scan when camera is active - increased frequency for better UX
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isScanning && showCamera) {
       interval = setInterval(() => {
         captureAndScanImage();
-      }, 1000); // Scan every second
+      }, 500); // Scan every 500ms for faster detection
     }
     return () => {
       if (interval) {
@@ -244,6 +248,16 @@ const CouponRedemption: React.FC = () => {
       }
     };
   }, [isScanning, showCamera, captureAndScanImage]);
+
+  // Auto-start camera when component mounts in QR mode
+  useEffect(() => {
+    if (activeMode === 'qr') {
+      startCameraScanning();
+    }
+    return () => {
+      stopCameraScanning();
+    };
+  }, [activeMode, startCameraScanning, stopCameraScanning]);
 
   if (isLoading) {
     return (
@@ -366,15 +380,7 @@ const CouponRedemption: React.FC = () => {
 
                   {/* Camera Scanner Toggle */}
                   <div className="flex justify-center">
-                    {!showCamera ? (
-                      <button
-                        onClick={startCameraScanning}
-                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center space-x-2"
-                      >
-                        <span>📷</span>
-                        <span>Scan with Camera</span>
-                      </button>
-                    ) : (
+                    {showCamera ? (
                       <button
                         onClick={stopCameraScanning}
                         className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors flex items-center space-x-2"
@@ -382,6 +388,10 @@ const CouponRedemption: React.FC = () => {
                         <span>⏹️</span>
                         <span>Stop Camera</span>
                       </button>
+                    ) : (
+                      <div className="text-sm text-gray-500">
+                        Camera will start automatically when page loads
+                      </div>
                     )}
                   </div>
 
@@ -404,21 +414,23 @@ const CouponRedemption: React.FC = () => {
                         />
                         {isScanning && (
                           <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-48 h-48 border-2 border-green-400 border-dashed animate-pulse"></div>
+                            <div className="relative">
+                              <div className="w-48 h-48 border-2 border-green-400 border-dashed animate-pulse"></div>
+                              <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 bg-green-500 text-white text-xs px-2 py-1 rounded">
+                                Scanning...
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>
 
                       <div className="text-center">
-                        <p className="text-sm text-gray-600 mb-2">
-                          {isScanning ? 'Scanning for QR codes...' : 'Position QR code in the camera view'}
+                        <p className="text-sm text-gray-600">
+                          {isScanning ? 'Scanning for QR codes automatically...' : 'Position QR code in the camera view'}
                         </p>
-                        <button
-                          onClick={captureAndScanImage}
-                          className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors"
-                        >
-                          📸 Capture & Scan
-                        </button>
+                        <p className="text-xs text-gray-500 mt-1">
+                          QR codes will be detected automatically when in view
+                        </p>
                       </div>
                     </div>
                   )}
@@ -464,21 +476,12 @@ const CouponRedemption: React.FC = () => {
                   </div>
 
                   {foundCoupon.status !== 'Consumed' && (
-                    <div className="flex items-center space-x-3">
-                      <label className="text-sm font-medium text-gray-700">Redeem Count:</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max={foundCoupon.total_count - foundCoupon.consumed_count}
-                        value={redeemCount}
-                        onChange={(e) => setRedeemCount(parseInt(e.target.value) || 1)}
-                        className="w-20 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      />
+                    <div className="flex justify-center">
                       <button
-                        onClick={() => redeemCoupon(foundCoupon, redeemCount)}
-                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                        onClick={() => redeemCoupon(foundCoupon, 1)}
+                        className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors font-medium"
                       >
-                        Redeem Coupon
+                        Redeem This Coupon
                       </button>
                     </div>
                   )}
@@ -562,18 +565,10 @@ const CouponRedemption: React.FC = () => {
                                 </div>
 
                                 {coupon.status !== 'Consumed' && (
-                                  <div className="flex items-center space-x-2 ml-4">
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      max={coupon.total_count - coupon.consumed_count}
-                                      defaultValue={1}
-                                      className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                      onChange={(e) => setRedeemCount(parseInt(e.target.value) || 1)}
-                                    />
+                                  <div className="flex items-center ml-4">
                                     <button
-                                      onClick={() => redeemCoupon(coupon, redeemCount)}
-                                      className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                                      onClick={() => redeemCoupon(coupon, 1)}
+                                      className="px-4 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors font-medium"
                                     >
                                       Redeem
                                     </button>

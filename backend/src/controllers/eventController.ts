@@ -65,12 +65,62 @@ export const getUserEvents = async (req: AuthenticatedRequest, res: Response): P
       where: { user_id },
       include: [
         { model: CouponRate },
-        { model: MealChoice }
+        { model: MealChoice },
+        {
+          model: Participant,
+          include: [{
+            model: Coupon,
+            include: [{ model: CouponRate }]
+          }]
+        }
       ],
       order: [['created_at', 'DESC']]
     });
 
-    res.json(events);
+    // Calculate statistics for each event
+    const eventsWithStats = events.map(event => {
+      const eventData = event.toJSON() as any;
+      let totalCoupons = 0;
+      let redeemedCoupons = 0;
+      let totalAmount = 0;
+      let redeemedAmount = 0;
+
+      if (eventData.Participants) {
+        eventData.Participants.forEach((participant: any) => {
+          if (participant.Coupons) {
+            participant.Coupons.forEach((coupon: any) => {
+              totalCoupons++;
+              const couponPrice = parseFloat(coupon.CouponRate?.price || 0);
+              totalAmount += couponPrice;
+
+              if (coupon.status === 'Consumed' || coupon.status === 'Partial') {
+                redeemedCoupons++;
+                if (coupon.status === 'Consumed') {
+                  redeemedAmount += couponPrice;
+                } else {
+                  // For partial, calculate proportional amount
+                  const consumedRatio = coupon.consumed_count / coupon.total_count;
+                  redeemedAmount += couponPrice * consumedRatio;
+                }
+              }
+            });
+          }
+        });
+      }
+
+      return {
+        ...eventData,
+        stats: {
+          totalCoupons,
+          redeemedCoupons,
+          totalAmount: parseFloat(totalAmount.toFixed(2)),
+          redeemedAmount: parseFloat(redeemedAmount.toFixed(2)),
+          totalParticipants: eventData.Participants ? eventData.Participants.length : 0
+        }
+      };
+    });
+
+    res.json(eventsWithStats);
   } catch (error) {
     console.error('Get user events error:', error);
     res.status(500).json({ error: 'Internal server error' });

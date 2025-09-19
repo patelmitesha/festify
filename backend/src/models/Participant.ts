@@ -2,8 +2,24 @@ import { DataTypes, Model } from 'sequelize';
 import sequelize from '../config/database';
 import Event from './Event';
 
+// Import Coupon for proper typing
+import type { CouponAttributes } from './Coupon';
+
 // Forward declaration to avoid circular imports
-declare class Coupon extends Model {}
+declare class Coupon extends Model<CouponAttributes> implements CouponAttributes {
+  public coupon_id: number;
+  public participant_id: number;
+  public event_id: number;
+  public rate_id: number;
+  public meal_id: number;
+  public qr_code_value: string;
+  public qr_code_link?: string;
+  public status: 'Booked' | 'Consumed' | 'Partial';
+  public consumed_count: number;
+  public total_count: number;
+  public created_at: Date;
+  public updated_at: Date;
+}
 
 export interface ParticipantAttributes {
   participant_id?: number;

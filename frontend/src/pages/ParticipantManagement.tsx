@@ -130,6 +130,26 @@ const ParticipantManagement: React.FC = () => {
     }
   };
 
+  const downloadParticipantMobilePDF = async (participantId: number, participantName: string) => {
+    try {
+      const response = await api.get(`/events/${eventId}/participants/${participantId}/mobile-pdf`, {
+        responseType: 'blob'
+      });
+
+      // Create blob link to download
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `participant-${participantName.replace(/\s+/g, '-')}-mobile-qr.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError('Failed to download participant mobile PDF');
+    }
+  };
+
   if (isLoading) {
     return (
       <Layout>
@@ -399,7 +419,13 @@ const ParticipantManagement: React.FC = () => {
                         )}
                       </div>
 
-                      <div className="flex space-x-2 ml-4">
+                      <div className="flex flex-col space-y-2 ml-4">
+                        <button
+                          onClick={() => downloadParticipantMobilePDF(participant.participant_id, participant.name)}
+                          className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                        >
+                          Download Mobile PDF
+                        </button>
                         <button
                           onClick={() => handleDeleteParticipant(participant.participant_id)}
                           className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"

@@ -103,18 +103,46 @@ const Dashboard: React.FC = () => {
                   <div>🗓 {new Date(event.start_date).toLocaleDateString()}</div>
                   <div>⏰ {new Date(event.end_date).toLocaleDateString()}</div>
                 </div>
-                <div className="flex space-x-2">
+
+                {/* Event Statistics */}
+                {event.stats && (
+                  <div className="bg-gray-50 rounded-lg p-3 mb-4 space-y-2">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-600">👥 Participants:</span>
+                      <span className="font-medium text-gray-900">{event.stats.totalParticipants}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-600">🎫 Total Coupons:</span>
+                      <span className="font-medium text-gray-900">{event.stats.totalCoupons}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-600">✅ Redeemed:</span>
+                      <span className="font-medium text-green-600">
+                        {event.stats.redeemedCoupons} / {event.stats.totalCoupons}
+                        {event.stats.totalCoupons > 0 && (
+                          <span className="text-xs ml-1">
+                            ({Math.round((event.stats.redeemedCoupons / event.stats.totalCoupons) * 100)}%)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-600">💰 Total Amount:</span>
+                      <span className="font-medium text-gray-900">₹{event.stats.totalAmount}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-600">💸 Redeemed Amount:</span>
+                      <span className="font-medium text-green-600">₹{event.stats.redeemedAmount}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-center">
                   <Link
                     to={`/events/${event.event_id}`}
-                    className="flex-1 text-center px-3 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                    className="w-full text-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
                   >
                     View Details
-                  </Link>
-                  <Link
-                    to={`/events/${event.event_id}/participants`}
-                    className="flex-1 text-center px-3 py-2 bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
-                  >
-                    Manage
                   </Link>
                 </div>
               </div>
