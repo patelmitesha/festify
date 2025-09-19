@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticateToken } from '../middleware/auth';
+import { checkEventAccess, requirePermission } from '../middleware/permissions';
 import {
   addParticipant,
   getEventParticipants,
@@ -11,11 +12,11 @@ import {
 
 const router = Router();
 
-router.post('/:eventId/participants', authenticateToken, addParticipant);
-router.get('/:eventId/participants', authenticateToken, getEventParticipants);
-router.get('/:eventId/participants/search', authenticateToken, searchParticipantsByPhone);
-router.get('/:eventId/participants/:participantId/mobile-pdf', authenticateToken, generateParticipantMobilePDF);
-router.put('/:eventId/participants/:participantId', authenticateToken, updateParticipant);
-router.delete('/:eventId/participants/:participantId', authenticateToken, deleteParticipant);
+router.post('/:eventId/participants', authenticateToken, checkEventAccess, requirePermission('add_participants'), addParticipant);
+router.get('/:eventId/participants', authenticateToken, checkEventAccess, getEventParticipants);
+router.get('/:eventId/participants/search', authenticateToken, checkEventAccess, searchParticipantsByPhone);
+router.get('/:eventId/participants/:participantId/mobile-pdf', authenticateToken, checkEventAccess, generateParticipantMobilePDF);
+router.put('/:eventId/participants/:participantId', authenticateToken, checkEventAccess, requirePermission('add_participants'), updateParticipant);
+router.delete('/:eventId/participants/:participantId', authenticateToken, checkEventAccess, requirePermission('add_participants'), deleteParticipant);
 
 export default router;

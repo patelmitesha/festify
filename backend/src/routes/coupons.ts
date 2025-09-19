@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticateToken } from '../middleware/auth';
+import { checkEventAccess, requirePermission } from '../middleware/permissions';
 import {
   getCouponByQR,
   getCouponDataByQR,
@@ -18,10 +19,10 @@ const router = Router();
 router.get('/qr/:qrCode', authenticateToken, getCouponByQR);
 router.get('/data/:qrCode', getCouponDataByQR);
 router.get('/view/:qrCode', viewCouponByQR);
-router.post('/redeem/:qrCode', authenticateToken, redeemCoupon);
-router.get('/events/:eventId', authenticateToken, getEventCoupons);
-router.get('/events/:eventId/pdf/:participantId', authenticateToken, generateCouponPDF);
+router.post('/redeem/:qrCode', authenticateToken, requirePermission('redeem_coupons'), redeemCoupon);
+router.get('/events/:eventId', authenticateToken, checkEventAccess, getEventCoupons);
+router.get('/events/:eventId/pdf/:participantId', authenticateToken, checkEventAccess, generateCouponPDF);
 router.get('/pdf/:couponId', authenticateToken, generateSingleCouponPDF);
-router.get('/events/:eventId/redemptions', authenticateToken, getCouponRedemptions);
+router.get('/events/:eventId/redemptions', authenticateToken, checkEventAccess, getCouponRedemptions);
 
 export default router;

@@ -10,6 +10,8 @@ const EventReports: React.FC = () => {
   const [summary, setSummary] = useState<EventSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     if (eventId) {
@@ -17,9 +19,26 @@ const EventReports: React.FC = () => {
     }
   }, [eventId]);
 
-  const fetchEventAndReports = async () => {
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    if (eventId) {
+      const interval = setInterval(() => {
+        fetchEventAndReports(false);
+      }, 30000);
+
+      return () => clearInterval(interval);
+    }
+  }, [eventId]);
+
+  const fetchEventAndReports = async (isManualRefresh = false) => {
     try {
-      setIsLoading(true);
+      if (isManualRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
+      setError('');
+
       // Fetch event details first
       const eventResponse = await api.get(`/events/${eventId}`);
       setEvent(eventResponse.data);
@@ -28,6 +47,7 @@ const EventReports: React.FC = () => {
       try {
         const reportsResponse = await api.get(`/reports/${eventId}/summary`);
         setSummary(reportsResponse.data);
+        setLastUpdated(new Date());
       } catch (reportsErr: any) {
         // If reports endpoint doesn't exist, create a mock summary
         if (reportsErr.response?.status === 404) {
@@ -41,6 +61,7 @@ const EventReports: React.FC = () => {
               breakdown: []
             }
           });
+          setLastUpdated(new Date());
         } else {
           throw reportsErr;
         }
@@ -49,7 +70,12 @@ const EventReports: React.FC = () => {
       setError(err.response?.data?.error || 'Failed to fetch event or reports');
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
+  };
+
+  const handleRefresh = () => {
+    fetchEventAndReports(true);
   };
 
   const exportReport = async (format: 'pdf' | 'csv') => {
@@ -117,19 +143,33 @@ const EventReports: React.FC = () => {
               {event?.name} - Analytics and detailed reports
             </p>
           </div>
-          <div className="flex space-x-3">
-            <button
-              onClick={() => exportReport('pdf')}
-              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-            >
-              Export PDF
-            </button>
-            <button
-              onClick={() => exportReport('csv')}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-            >
-              Export CSV
-            </button>
+          <div className="flex flex-col items-end space-y-2">
+            <div className="flex space-x-3">
+              <button
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-blue-400 disabled:cursor-not-allowed"
+              >
+                {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
+              </button>
+              <button
+                onClick={() => exportReport('pdf')}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+              >
+                Export PDF
+              </button>
+              <button
+                onClick={() => exportReport('csv')}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+              >
+                Export CSV
+              </button>
+            </div>
+            {lastUpdated && (
+              <div className="text-sm text-gray-500">
+                Last updated: {lastUpdated.toLocaleTimeString()}
+              </div>
+            )}
           </div>
         </div>
 

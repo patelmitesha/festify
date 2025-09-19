@@ -6,6 +6,8 @@ export interface UserAttributes {
   name: string;
   email: string;
   password_hash: string;
+  role: 'manager' | 'representative';
+  created_by?: number;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -34,6 +36,19 @@ User.init(
     password_hash: {
       type: DataTypes.STRING(255),
       allowNull: false,
+    },
+    role: {
+      type: DataTypes.ENUM('manager', 'representative'),
+      allowNull: false,
+      defaultValue: 'manager',
+    },
+    created_by: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'users',
+        key: 'user_id',
+      },
     },
   },
   {

@@ -9,6 +9,8 @@ export const getEventSummary = async (req: AuthenticatedRequest, res: Response):
     const { eventId } = req.params;
     const user_id = req.user.user_id;
 
+    console.log(`Fetching summary for event ${eventId}, user ${user_id}`);
+
     const event = await Event.findOne({
       where: {
         event_id: eventId,
@@ -21,21 +23,34 @@ export const getEventSummary = async (req: AuthenticatedRequest, res: Response):
       return;
     }
 
-    const summary = await Coupon.findAll({
+    // Get breakdown by category - simplified approach to avoid GROUP BY issues
+    const allCoupons = await Coupon.findAll({
       where: { event_id: eventId },
       include: [
         { model: CouponRate, attributes: ['rate_type', 'price'] },
         { model: MealChoice, attributes: ['meal_type'] }
-      ],
-      attributes: [
-        [Sequelize.fn('COUNT', Sequelize.col('Coupon.coupon_id')), 'total_booked'],
-        [Sequelize.fn('SUM', Sequelize.col('Coupon.consumed_count')), 'total_redeemed'],
-        [Sequelize.fn('SUM', Sequelize.col('Coupon.total_count')), 'total_count']
-      ],
-      group: ['CouponRate.rate_type', 'MealChoice.meal_type'],
-      raw: false
+      ]
     });
 
+    // Process breakdown manually to avoid SQL GROUP BY issues
+    const breakdownMap = new Map();
+    allCoupons.forEach((coupon: any) => {
+      const key = `${coupon.MealChoice?.meal_type || 'Unknown'} - ${coupon.CouponRate?.rate_type || 'Unknown'}`;
+      if (!breakdownMap.has(key)) {
+        breakdownMap.set(key, {
+          category: key,
+          count: 0,
+          redeemed: 0
+        });
+      }
+      const item = breakdownMap.get(key);
+      item.count += coupon.total_count || 0;
+      item.redeemed += coupon.consumed_count || 0;
+    });
+
+    const breakdown = Array.from(breakdownMap.values());
+
+    // Get total counts
     const totalParticipants = await Participant.count({
       where: { event_id: eventId }
     });
@@ -50,6 +65,8 @@ export const getEventSummary = async (req: AuthenticatedRequest, res: Response):
 
     const pendingCoupons = (totalCouponsBooked || 0) - (totalCouponsRedeemed || 0);
 
+    console.log(`Summary data: participants=${totalParticipants}, booked=${totalCouponsBooked}, redeemed=${totalCouponsRedeemed}`);
+
     res.json({
       event: {
         name: event.name,
@@ -62,7 +79,7 @@ export const getEventSummary = async (req: AuthenticatedRequest, res: Response):
         total_coupons_booked: totalCouponsBooked || 0,
         total_coupons_redeemed: totalCouponsRedeemed || 0,
         pending_coupons: pendingCoupons,
-        breakdown: summary
+        breakdown: breakdown
       }
     });
   } catch (error) {

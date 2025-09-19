@@ -30,7 +30,9 @@
       "Bash(git push:*)",
       "Bash(git remote set-url:*)",
       "Bash(git checkout:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(where mysql)",
+      "Bash(tasklist)"
     ],
     "deny": [],
     "ask": []

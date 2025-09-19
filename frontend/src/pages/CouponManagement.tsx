@@ -62,6 +62,44 @@ const CouponManagement: React.FC = () => {
     }
   };
 
+  const sendWhatsAppMessage = (coupon: any) => {
+    if (!coupon.Participant?.contact_number) {
+      setError('No contact number available for this participant');
+      return;
+    }
+
+    const participantName = coupon.Participant?.name || 'Participant';
+    const eventName = event?.name || 'Event';
+    const mealType = coupon.MealChoice?.meal_type || 'Meal';
+    const couponLink = `http://localhost:3000/coupon/${coupon.qr_code_value}`;
+
+    const message = `🎟️ *FESTIFY Event Coupon*
+
+Hello ${participantName}! 👋
+
+Your coupon for *${eventName}* is ready!
+
+📋 *Details:*
+• Meal: ${mealType}
+• Status: ${coupon.status}
+• Usage: ${coupon.consumed_count}/${coupon.total_count}
+
+🔗 *View your coupon:*
+${couponLink}
+
+Please save this link and present it during the event for meal redemption.
+
+Thank you for participating! 🎉
+
+_Powered by Festify_`;
+
+    const encodedMessage = encodeURIComponent(message);
+    const phoneNumber = coupon.Participant.contact_number.replace(/[^\d]/g, ''); // Remove non-digits
+    const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
+
+    window.open(whatsappUrl, '_blank');
+  };
+
   // Note: Bulk PDF download not implemented in backend yet
 
   if (isLoading) {
@@ -303,6 +341,16 @@ const CouponManagement: React.FC = () => {
                             className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
                           >
                             View QR Link
+                          </button>
+                        )}
+
+                        {coupon.Participant?.contact_number && (
+                          <button
+                            onClick={() => sendWhatsAppMessage(coupon)}
+                            className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center justify-center space-x-1"
+                          >
+                            <span>📱</span>
+                            <span>Send WhatsApp</span>
                           </button>
                         )}
                       </div>

@@ -3,7 +3,10 @@ import jwt from 'jsonwebtoken';
 import { User } from '../models';
 
 export interface AuthenticatedRequest extends Request {
-  user?: any;
+  user?: any & {
+    hasAccess?: boolean;
+    permissions?: string[];
+  };
 }
 
 export const authenticateToken = async (

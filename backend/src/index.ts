@@ -9,6 +9,7 @@ import eventRoutes from './routes/events';
 import participantRoutes from './routes/participants';
 import couponRoutes from './routes/coupons';
 import reportRoutes from './routes/reports';
+import userManagementRoutes from './routes/userManagement';
 
 dotenv.config();
 
@@ -34,6 +35,7 @@ app.use('/api/events', eventRoutes);
 app.use('/api/events', participantRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/users', userManagementRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ message: 'Festify API is running', timestamp: new Date().toISOString() });

@@ -12,6 +12,7 @@ import CouponManagement from './pages/CouponManagement';
 import CouponRedemption from './pages/CouponRedemption';
 import CouponView from './pages/CouponView';
 import EventReports from './pages/EventReports';
+import UserManagement from './pages/UserManagement';
 
 function App() {
   return (
@@ -75,6 +76,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <EventReports />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                <ProtectedRoute>
+                  <UserManagement />
                 </ProtectedRoute>
               }
             />
