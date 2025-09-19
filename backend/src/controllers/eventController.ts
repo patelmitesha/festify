@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { Event, CouponRate, MealChoice, Participant, Coupon } from '../models/index';
+import { Event, CouponRate, MealChoice, Participant, Coupon, EventRepresentative, User } from '../models/index';
 import { AuthenticatedRequest } from '../middleware/auth';
 
 export const createEvent = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -61,21 +61,56 @@ export const getUserEvents = async (req: AuthenticatedRequest, res: Response): P
   try {
     const user_id = req.user.user_id;
 
-    const events = await Event.findAll({
-      where: { user_id },
-      include: [
-        { model: CouponRate },
-        { model: MealChoice },
-        {
-          model: Participant,
-          include: [{
-            model: Coupon,
-            include: [{ model: CouponRate }]
-          }]
-        }
-      ],
-      order: [['created_at', 'DESC']]
-    });
+    // Get user to check their role
+    const user = await User.findByPk(user_id);
+    if (!user) {
+      res.status(401).json({ error: 'User not found' });
+      return;
+    }
+
+    let events: any[] = [];
+
+    // If user is a manager, get events they own
+    if ((user as any).role === 'manager') {
+      events = await Event.findAll({
+        where: { user_id },
+        include: [
+          { model: CouponRate },
+          { model: MealChoice },
+          {
+            model: Participant,
+            include: [{
+              model: Coupon,
+              include: [{ model: CouponRate }]
+            }]
+          }
+        ],
+        order: [['created_at', 'DESC']]
+      });
+    }
+
+    // If user is a representative, get events they're assigned to
+    if ((user as any).role === 'representative') {
+      const assignments = await EventRepresentative.findAll({
+        where: { user_id },
+        include: [{
+          model: Event,
+          include: [
+            { model: CouponRate },
+            { model: MealChoice },
+            {
+              model: Participant,
+              include: [{
+                model: Coupon,
+                include: [{ model: CouponRate }]
+              }]
+            }
+          ]
+        }]
+      });
+
+      events = assignments.map(assignment => (assignment as any).Event).filter(Boolean);
+    }
 
     // Calculate statistics for each event
     const eventsWithStats = events.map(event => {
@@ -132,20 +167,51 @@ export const getEventDetails = async (req: AuthenticatedRequest, res: Response):
     const { eventId } = req.params;
     const user_id = req.user.user_id;
 
-    const event = await Event.findOne({
-      where: {
-        event_id: eventId,
-        user_id
-      },
-      include: [
-        { model: CouponRate },
-        { model: MealChoice },
-        { model: Participant }
-      ]
-    });
+    // Get user to check their role
+    const user = await User.findByPk(user_id);
+    if (!user) {
+      res.status(401).json({ error: 'User not found' });
+      return;
+    }
+
+    let event = null;
+
+    // If user is a manager, check if they own the event
+    if ((user as any).role === 'manager') {
+      event = await Event.findOne({
+        where: {
+          event_id: eventId,
+          user_id
+        },
+        include: [
+          { model: CouponRate },
+          { model: MealChoice },
+          { model: Participant }
+        ]
+      });
+    }
+
+    // If user is a representative, check if they're assigned to this event
+    if ((user as any).role === 'representative') {
+      const assignment = await EventRepresentative.findOne({
+        where: { event_id: eventId, user_id },
+        include: [{
+          model: Event,
+          include: [
+            { model: CouponRate },
+            { model: MealChoice },
+            { model: Participant }
+          ]
+        }]
+      });
+
+      if (assignment) {
+        event = (assignment as any).Event;
+      }
+    }
 
     if (!event) {
-      res.status(404).json({ error: 'Event not found' });
+      res.status(404).json({ error: 'Event not found or access denied' });
       return;
     }
 

@@ -1,8 +1,45 @@
 import { Response } from 'express';
-import { Coupon, Event, Participant, CouponRate, MealChoice, Redemption } from '../models';
+import { Coupon, Event, Participant, CouponRate, MealChoice, Redemption, User, EventRepresentative } from '../models';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { generateQRCode } from '../utils/qr';
 import PDFDocument from 'pdfkit';
+
+// Helper function to check if user has access to event
+const checkEventAccess = async (eventId: string, userId: number) => {
+  // Get user to check their role
+  const user = await User.findByPk(userId);
+  if (!user) {
+    return null;
+  }
+
+  let event = null;
+
+  // If user is a manager, check if they own the event
+  if ((user as any).role === 'manager') {
+    event = await Event.findOne({
+      where: {
+        event_id: eventId,
+        user_id: userId
+      }
+    });
+  }
+
+  // If user is a representative, check if they're assigned to this event
+  if ((user as any).role === 'representative') {
+    const assignment = await EventRepresentative.findOne({
+      where: { event_id: eventId, user_id: userId },
+      include: [{
+        model: Event
+      }]
+    });
+
+    if (assignment) {
+      event = (assignment as any).Event;
+    }
+  }
+
+  return event;
+};
 
 export const getCouponByQR = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -47,15 +84,10 @@ export const generateCouponPDF = async (req: AuthenticatedRequest, res: Response
     const { eventId, participantId } = req.params;
     const user_id = req.user.user_id;
 
-    const event = await Event.findOne({
-      where: {
-        event_id: eventId,
-        user_id
-      }
-    });
+    const event = await checkEventAccess(eventId, user_id);
 
     if (!event) {
-      res.status(404).json({ error: 'Event not found' });
+      res.status(404).json({ error: 'Event not found or access denied' });
       return;
     }
 
@@ -228,37 +260,122 @@ export const generateSingleCouponPDF = async (req: AuthenticatedRequest, res: Re
 
     const doc = new PDFDocument({ margin: 50 });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="festify-coupon-${coupon.coupon_id}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="festify-coupon-${coupon.Participant?.name?.replace(/\s+/g, '-') || 'coupon'}.pdf"`);
 
     doc.pipe(res);
 
-    doc.fontSize(24).text('FESTIFY COUPON', { align: 'center' });
+    // Header Section - Purple gradient-like design
+    const pageWidth = doc.page.width;
+    const headerHeight = 80;
+
+    // Background rectangle for header
+    doc.rect(0, 0, pageWidth, headerHeight)
+       .fillAndStroke('#6366f1', '#4f46e5');
+
+    // Reset fill color and add header text
+    doc.fillColor('white');
+    doc.fontSize(28).text('FESTIFY COUPON', 50, 25, { align: 'center', width: pageWidth - 100 });
+    doc.fontSize(18).text(coupon.Event?.name || 'Event', 50, 50, { align: 'center', width: pageWidth - 100 });
+
+    // Reset position and color for content
+    doc.y = headerHeight + 30;
+    doc.fillColor('#1f2937');
+
+    // Coupon Information Card
+    const cardY = doc.y;
+    const cardHeight = 120;
+    doc.rect(50, cardY, pageWidth - 100, cardHeight)
+       .fillAndStroke('#f9fafb', '#e5e7eb');
+
+    // Add left border accent
+    doc.rect(50, cardY, 4, cardHeight).fill('#6366f1');
+
+    // Coupon Details Content
+    doc.fillColor('#374151');
+    doc.fontSize(14).text('Participant:', 70, cardY + 15);
+    doc.fontSize(12).text(coupon.Participant?.name || 'Unknown', 150, cardY + 15);
+
+    doc.fontSize(14).text('Meal Type:', 70, cardY + 35);
+    doc.fontSize(12).text((coupon as any).MealChoice?.meal_type || 'Not specified', 150, cardY + 35);
+
+    doc.fontSize(14).text('Rate Type:', 70, cardY + 55);
+    doc.fontSize(12).text((coupon as any).CouponRate?.rate_type || 'Unknown', 150, cardY + 55);
+
+    doc.fontSize(14).text('Price:', 70, cardY + 75);
+    doc.fontSize(12).fillColor('#059669').text(`Rs ${(coupon as any).CouponRate?.price || 0}`, 150, cardY + 75);
+
+    doc.fillColor('#374151');
+    doc.fontSize(14).text('Status:', 70, cardY + 95);
+    const statusColor = coupon.status === 'Booked' ? '#059669' : coupon.status === 'Partial' ? '#d97706' : '#dc2626';
+    doc.fontSize(12).fillColor(statusColor).text(coupon.status === 'Booked' ? 'Available' : coupon.status === 'Partial' ? 'Partially Used' : 'Fully Used', 150, cardY + 95);
+
+    // Event Details Card
+    doc.y = cardY + cardHeight + 20;
+    const eventCardY = doc.y;
+    const eventCardHeight = 80;
+    doc.rect(50, eventCardY, pageWidth - 100, eventCardHeight)
+       .fillAndStroke('#f9fafb', '#e5e7eb');
+
+    // Add left border accent
+    doc.rect(50, eventCardY, 4, eventCardHeight).fill('#6366f1');
+
+    // Event Details Content
+    doc.fillColor('#374151');
+    doc.fontSize(14).text('Venue:', 70, eventCardY + 15);
+    doc.fontSize(12).text(coupon.Event?.venue || 'TBA', 150, eventCardY + 15);
+
+    doc.fontSize(14).text('Date:', 70, eventCardY + 35);
+    const eventDate = coupon.Event?.start_date ? new Date(coupon.Event.start_date).toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }) : 'TBA';
+    doc.fontSize(12).text(eventDate, 150, eventCardY + 35);
+
+    // QR Code Section
+    doc.y = eventCardY + eventCardHeight + 30;
+    doc.fillColor('#1f2937');
+    doc.fontSize(16).text('QR Code', { align: 'center' });
     doc.moveDown();
 
-    doc.fontSize(18).text(coupon.Event?.name || 'Event', { align: 'center' });
-    doc.moveDown();
+    try {
+      const qrCodeData = await generateQRCode(coupon.qr_code_value);
+      const qrImageBuffer = Buffer.from(qrCodeData.split(',')[1], 'base64');
 
-    doc.fontSize(12);
-    doc.text(`Participant: ${coupon.Participant?.name || 'Unknown'}`);
-    doc.text(`Meal: ${(coupon as any).MealChoice?.meal_type || 'Not specified'}`);
-    doc.text(`Price: $${(coupon as any).CouponRate?.price || 0}`);
-    doc.text(`Status: ${coupon.status}`);
-    doc.moveDown();
+      // QR Code background card
+      const qrCardY = doc.y;
+      const qrCardSize = 220;
+      const qrCardX = (pageWidth - qrCardSize) / 2;
 
-    doc.text('EVENT DETAILS');
-    doc.text(`Venue: ${coupon.Event?.venue || 'TBA'}`);
-    doc.text(`Date: ${coupon.Event?.start_date ? new Date(coupon.Event.start_date).toLocaleDateString() : 'TBA'}`);
-    doc.moveDown();
+      // White background for QR code
+      doc.rect(qrCardX, qrCardY, qrCardSize, qrCardSize)
+         .fillAndStroke('#ffffff', '#e5e7eb');
 
-    const qrCodeData = await generateQRCode(coupon.qr_code_value);
-    const qrImageBuffer = Buffer.from(qrCodeData.split(',')[1], 'base64');
-    doc.image(qrImageBuffer, {
-      fit: [150, 150],
-      align: 'center'
-    });
+      // QR Code itself
+      const qrSize = 180;
+      const qrX = qrCardX + (qrCardSize - qrSize) / 2;
+      const qrY = qrCardY + 20;
 
-    doc.moveDown();
-    doc.fontSize(10).text(`QR Code: ${coupon.qr_code_value}`, { align: 'center' });
+      doc.image(qrImageBuffer, qrX, qrY, {
+        fit: [qrSize, qrSize]
+      });
+
+      // Position after QR card
+      doc.y = qrCardY + qrCardSize + 15;
+
+      doc.fontSize(10).fillColor('#6b7280').text(`Code: ${coupon.qr_code_value}`, { align: 'center' });
+      doc.moveDown();
+      doc.fontSize(10).fillColor('#6b7280').text('Present this coupon for meal redemption', { align: 'center' });
+    } catch (qrError) {
+      console.error('Error generating QR code:', qrError);
+      doc.fontSize(12).fillColor('#ef4444').text('Error generating QR code', { align: 'center' });
+    }
+
+    // Footer
+    doc.y = doc.page.height - 80;
+    doc.fontSize(8).fillColor('#9ca3af').text('Powered by Festify', { align: 'center' });
+    doc.fontSize(8).text(`Generated on: ${new Date().toLocaleString()}`, { align: 'center' });
 
     doc.end();
   } catch (error) {
@@ -272,15 +389,10 @@ export const getEventCoupons = async (req: AuthenticatedRequest, res: Response):
     const { eventId } = req.params;
     const user_id = req.user.user_id;
 
-    const event = await Event.findOne({
-      where: {
-        event_id: eventId,
-        user_id
-      }
-    });
+    const event = await checkEventAccess(eventId, user_id);
 
     if (!event) {
-      res.status(404).json({ error: 'Event not found' });
+      res.status(404).json({ error: 'Event not found or access denied' });
       return;
     }
 
