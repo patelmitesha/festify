@@ -13,10 +13,11 @@ const CouponRedemption: React.FC = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // QR Code Mode
-  const [qrCode, setQrCode] = useState('');
+  // Unified Search
+  const [searchValue, setSearchValue] = useState('');
   const [foundCoupon, setFoundCoupon] = useState<Coupon | null>(null);
-  const [redeemCount, setRedeemCount] = useState(1);
+  const [searchResults, setSearchResults] = useState<Participant[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Camera QR Scanning
   const [showCamera, setShowCamera] = useState(false);
@@ -24,22 +25,7 @@ const CouponRedemption: React.FC = () => {
   const webcamRef = useRef<Webcam>(null);
   const codeReader = useRef<BrowserMultiFormatReader | null>(null);
 
-  // Search Mode
-  const [searchPhone, setSearchPhone] = useState('');
-  const [searchResults, setSearchResults] = useState<Participant[]>([]);
-  const [selectedCoupon, setSelectedCoupon] = useState<Coupon | null>(null);
-  const [isSearching, setIsSearching] = useState(false);
-
-  // Mode toggle
-  const [activeMode, setActiveMode] = useState<'qr' | 'search'>('qr');
-
-  useEffect(() => {
-    if (eventId) {
-      fetchEvent();
-    }
-  }, [eventId]);
-
-  const fetchEvent = async () => {
+  const fetchEvent = useCallback(async () => {
     try {
       setIsLoading(true);
       const eventResponse = await api.get(`/events/${eventId}`);
@@ -49,56 +35,106 @@ const CouponRedemption: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [eventId]);
 
-  const searchCouponByQR = async () => {
-    if (!qrCode.trim()) {
-      setError('Please enter a QR code');
-      return;
+  useEffect(() => {
+    if (eventId) {
+      fetchEvent();
     }
-    await searchCouponByCode(qrCode.trim());
-  };
+  }, [eventId, fetchEvent]);
 
-  const searchCouponByCode = async (code: string) => {
-    if (!code.trim()) {
-      setError('Please enter a QR code');
-      return;
-    }
-
+  const searchByQRCode = useCallback(async (code: string) => {
     try {
-      setError('');
-      setSuccess('');
-      const response = await api.get(`/coupons/qr/${code.trim()}`);
+      const response = await api.get(`/coupons/qr/${code}`);
       setFoundCoupon(response.data.coupon);
+      setSuccess('Coupon found by QR code!');
+      setError(''); // Clear any existing errors
+      return true; // Success
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to find coupon');
-      setFoundCoupon(null);
+      setError(err.response?.data?.error || 'No coupon found with this QR code');
+      setSuccess(''); // Clear success message on error
+      return false; // Failed
     }
-  };
+  }, []);
 
-  const searchParticipantsByPhone = async () => {
-    if (!searchPhone.trim()) {
-      setError('Please enter a phone number');
-      return;
-    }
-
+  const searchByPhone = useCallback(async (phone: string) => {
     try {
-      setIsSearching(true);
-      setError('');
-      setSuccess('');
-      const response = await api.get(`/events/${eventId}/participants/search?phone=${searchPhone.trim()}`);
+      const response = await api.get(`/events/${eventId}/participants/search?phone=${phone}`);
       setSearchResults(response.data);
 
       if (response.data.length === 0) {
         setError('No participants found with this phone number');
+        setSuccess(''); // Clear success message
+        return false; // No results found
+      } else {
+        setSuccess(`Found ${response.data.length} participant(s) by phone number!`);
+        setError(''); // Clear any existing errors
+        return true; // Success
       }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to search participants');
-      setSearchResults([]);
+      setSuccess(''); // Clear success message on error
+      return false; // Failed
+    }
+  }, [eventId]);
+
+  // Smart search function that takes a value parameter
+  const performSearchWithValue = useCallback(async (value: string) => {
+    if (!value) {
+      setError('Please enter a QR code or phone number');
+      return;
+    }
+
+    // Reset previous results
+    setFoundCoupon(null);
+    setSearchResults([]);
+    setIsSearching(true);
+
+    try {
+      // Check if it looks like a phone number (contains only digits, +, -, spaces, parentheses)
+      const phonePattern = /^[\d\s+()-]+$/;
+      const cleanedValue = value.replace(/[^\d]/g, '');
+
+      // First try to search by QR code (this covers coupon QR codes)
+      // If it fails, then try phone search if it looks like a phone number
+      try {
+        const response = await api.get(`/coupons/qr/${value}`);
+        setFoundCoupon(response.data.coupon);
+        setSuccess('Coupon found by QR code!');
+        setError('');
+      } catch (err: any) {
+        // If QR code search fails and the value looks like a phone number, try phone search
+        if (phonePattern.test(value) && cleanedValue.length >= 10) {
+          try {
+            const response = await api.get(`/events/${eventId}/participants/search?phone=${value}`);
+            setSearchResults(response.data);
+
+            if (response.data.length === 0) {
+              setError('No participants found with this phone number');
+              setSuccess('');
+            } else {
+              setSuccess(`Found ${response.data.length} participant(s) by phone number!`);
+              setError('');
+            }
+          } catch (phoneErr: any) {
+            setError('No coupon or participant found with this code/number');
+            setSuccess('');
+          }
+        } else {
+          setError(err.response?.data?.error || 'No coupon found with this QR code');
+          setSuccess('');
+        }
+      }
     } finally {
       setIsSearching(false);
     }
-  };
+  }, [eventId]);
+
+  // Smart search function that detects QR code vs phone number
+  const performSearch = useCallback(async () => {
+    const currentValue = searchValue.trim();
+    return performSearchWithValue(currentValue);
+  }, [searchValue, performSearchWithValue]);
 
   const redeemCoupon = async (coupon: Coupon, count: number) => {
     try {
@@ -112,45 +148,34 @@ const CouponRedemption: React.FC = () => {
       setSuccess(`Coupon redeemed successfully! ${response.data.message}`);
 
       // Update the coupon in the state
-      if (activeMode === 'qr' && foundCoupon && foundCoupon.coupon_id === coupon.coupon_id) {
+      if (foundCoupon && foundCoupon.coupon_id === coupon.coupon_id) {
         setFoundCoupon(response.data.coupon);
-      } else if (activeMode === 'search') {
-        // Update the coupon in search results
-        setSearchResults(prev =>
-          prev.map(participant => ({
-            ...participant,
-            Coupons: participant.Coupons?.map(c =>
-              c.coupon_id === coupon.coupon_id ? response.data.coupon : c
-            )
-          }))
-        );
-
-        // Update selected coupon if it matches
-        if (selectedCoupon && selectedCoupon.coupon_id === coupon.coupon_id) {
-          setSelectedCoupon(response.data.coupon);
-        }
       }
 
-      // Reset redeem count
-      setRedeemCount(1);
+      // Update the coupon in search results
+      setSearchResults(prev =>
+        prev.map(participant => ({
+          ...participant,
+          Coupons: participant.Coupons?.map(c =>
+            c.coupon_id === coupon.coupon_id ? response.data.coupon : c
+          )
+        }))
+      );
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to redeem coupon');
     }
   };
 
   const clearSearch = () => {
-    setSearchPhone('');
-    setSearchResults([]);
-    setSelectedCoupon(null);
-    setError('');
-    setSuccess('');
-  };
-
-  const clearQRSearch = () => {
-    setQrCode('');
+    setSearchValue('');
     setFoundCoupon(null);
+    setSearchResults([]);
     setError('');
     setSuccess('');
+    // Also stop camera if it's running
+    if (showCamera) {
+      stopCameraScanning();
+    }
   };
 
   // Initialize QR code reader
@@ -166,9 +191,11 @@ const CouponRedemption: React.FC = () => {
   // Camera scanning functions
   const startCameraScanning = useCallback(async () => {
     try {
+      // Clear any existing errors when starting camera
+      setError('');
+      setSuccess('');
       setShowCamera(true);
       setIsScanning(true);
-      setError('');
     } catch (err) {
       setError('Failed to access camera. Please check permissions.');
     }
@@ -209,12 +236,55 @@ const CouponRedemption: React.FC = () => {
                   try {
                     const result = await codeReader.current.decodeFromImageElement(scanImg);
                     if (result) {
-                      const scannedCode = result.getText();
-                      setQrCode(scannedCode);
-                      stopCameraScanning();
-                      setSuccess('QR Code detected successfully!');
-                      // Automatically search for the coupon
-                      searchCouponByCode(scannedCode);
+                      const scannedCode = result.getText().trim();
+                      if (scannedCode) {
+                        // Clear error immediately when code is detected
+                        setError('');
+                        setSearchValue(scannedCode);
+                        stopCameraScanning();
+                        setSuccess('Code detected from QR scanner!');
+
+                        // Automatically search using the unified search logic
+                        setTimeout(() => {
+                          // Use the scanned code directly by calling the API
+                          const searchCode = async () => {
+                            setFoundCoupon(null);
+                            setSearchResults([]);
+                            setIsSearching(true);
+
+                            try {
+                              const response = await api.get(`/coupons/qr/${scannedCode}`);
+                              setFoundCoupon(response.data.coupon);
+                              setSuccess('Coupon found by QR code!');
+                              setError('');
+                            } catch (err: any) {
+                              // If QR search fails, try phone search
+                              const phonePattern = /^[\d\s+()-]+$/;
+                              const cleanedValue = scannedCode.replace(/[^\d]/g, '');
+
+                              if (phonePattern.test(scannedCode) && cleanedValue.length >= 10) {
+                                try {
+                                  const response = await api.get(`/events/${eventId}/participants/search?phone=${scannedCode}`);
+                                  setSearchResults(response.data);
+                                  if (response.data.length === 0) {
+                                    setError('No coupon or participant found with this code/number');
+                                  } else {
+                                    setSuccess(`Found ${response.data.length} participant(s) by phone number!`);
+                                    setError('');
+                                  }
+                                } catch (phoneErr: any) {
+                                  setError('No coupon or participant found with this code/number');
+                                }
+                              } else {
+                                setError(err.response?.data?.error || 'No coupon found with this QR code');
+                              }
+                            } finally {
+                              setIsSearching(false);
+                            }
+                          };
+                          searchCode();
+                        }, 100);
+                      }
                     }
                   } catch (err) {
                     // Silently continue scanning - no error logging for better UX
@@ -232,7 +302,7 @@ const CouponRedemption: React.FC = () => {
         setError('Failed to capture image from camera');
       }
     }
-  }, []);
+  }, [stopCameraScanning, eventId]);
 
   // Auto-scan when camera is active - increased frequency for better UX
   useEffect(() => {
@@ -249,15 +319,13 @@ const CouponRedemption: React.FC = () => {
     };
   }, [isScanning, showCamera, captureAndScanImage]);
 
-  // Auto-start camera when component mounts in QR mode
+  // Auto-start camera when component mounts
   useEffect(() => {
-    if (activeMode === 'qr') {
-      startCameraScanning();
-    }
+    startCameraScanning();
     return () => {
       stopCameraScanning();
     };
-  }, [activeMode, startCameraScanning, stopCameraScanning]);
+  }, [startCameraScanning, stopCameraScanning]);
 
   if (isLoading) {
     return (
@@ -289,42 +357,8 @@ const CouponRedemption: React.FC = () => {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Coupon Redemption</h1>
             <p className="text-gray-600 mt-1">
-              {event?.name} - Redeem coupons by QR code or search
+              {event?.name} - Search by QR code or phone number
             </p>
-          </div>
-        </div>
-
-        {/* Mode Toggle */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg w-fit">
-            <button
-              onClick={() => {
-                setActiveMode('qr');
-                clearSearch();
-                stopCameraScanning();
-              }}
-              className={`px-4 py-2 rounded-md transition-colors ${
-                activeMode === 'qr'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              📱 QR Code
-            </button>
-            <button
-              onClick={() => {
-                setActiveMode('search');
-                clearQRSearch();
-                stopCameraScanning();
-              }}
-              className={`px-4 py-2 rounded-md transition-colors ${
-                activeMode === 'search'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              🔍 Search by Phone
-            </button>
           </div>
         </div>
 
@@ -341,184 +375,34 @@ const CouponRedemption: React.FC = () => {
           </div>
         )}
 
-        {/* QR Code Mode */}
-        {activeMode === 'qr' && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">QR Code Redemption</h2>
+        {/* Unified Search */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Search Coupon</h2>
 
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="qrCode" className="block text-sm font-medium text-gray-700 mb-2">
-                  QR Code Value
-                </label>
-                <div className="space-y-3">
-                  <div className="flex space-x-3">
-                    <input
-                      type="text"
-                      id="qrCode"
-                      value={qrCode}
-                      onChange={(e) => setQrCode(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter or scan QR code value"
-                      onKeyPress={(e) => e.key === 'Enter' && searchCouponByQR()}
-                    />
-                    <button
-                      onClick={searchCouponByQR}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                    >
-                      Search
-                    </button>
-                    {qrCode && (
-                      <button
-                        onClick={clearQRSearch}
-                        className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Camera Scanner Toggle */}
-                  <div className="flex justify-center">
-                    {showCamera ? (
-                      <button
-                        onClick={stopCameraScanning}
-                        className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors flex items-center space-x-2"
-                      >
-                        <span>⏹️</span>
-                        <span>Stop Camera</span>
-                      </button>
-                    ) : (
-                      <div className="text-sm text-gray-500">
-                        Camera will start automatically when page loads
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Camera Preview */}
-                  {showCamera && (
-                    <div className="flex flex-col items-center space-y-3">
-                      <div className="relative border-2 border-green-500 rounded-lg overflow-hidden">
-                        <Webcam
-                          ref={webcamRef}
-                          audio={false}
-                          screenshotFormat="image/jpeg"
-                          width={400}
-                          height={300}
-                          videoConstraints={{
-                            width: 400,
-                            height: 300,
-                            facingMode: "environment" // Use back camera on mobile
-                          }}
-                          className="rounded-lg"
-                        />
-                        {isScanning && (
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="relative">
-                              <div className="w-48 h-48 border-2 border-green-400 border-dashed animate-pulse"></div>
-                              <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 bg-green-500 text-white text-xs px-2 py-1 rounded">
-                                Scanning...
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="text-center">
-                        <p className="text-sm text-gray-600">
-                          {isScanning ? 'Scanning for QR codes automatically...' : 'Position QR code in the camera view'}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          QR codes will be detected automatically when in view
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Found Coupon */}
-              {foundCoupon && (
-                <div className="mt-6 p-4 border border-gray-200 rounded-lg">
-                  <h3 className="text-lg font-medium text-gray-900 mb-3">Coupon Found</h3>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <div className="p-3 bg-blue-50 rounded-lg">
-                      <div className="text-sm font-medium text-blue-700">Participant</div>
-                      <div className="text-blue-900">{foundCoupon.Participant?.name || 'Unknown'}</div>
-                    </div>
-                    <div className="p-3 bg-green-50 rounded-lg">
-                      <div className="text-sm font-medium text-green-700">Meal Option</div>
-                      <div className="text-green-900">{foundCoupon.MealChoice?.meal_type || 'Not specified'}</div>
-                    </div>
-                    <div className="p-3 bg-purple-50 rounded-lg">
-                      <div className="text-sm font-medium text-purple-700">Rate & Price</div>
-                      <div className="text-purple-900">
-                        {foundCoupon.CouponRate?.rate_type || 'Unknown'} - ₹{foundCoupon.CouponRate?.price || 0}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-4">
-                    <div>
-                      <span className="text-sm font-medium text-gray-700">Status: </span>
-                      <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                        foundCoupon.status === 'Booked' ? 'bg-green-100 text-green-800' :
-                        foundCoupon.status === 'Partial' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {foundCoupon.status}
-                      </span>
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      <strong>Usage:</strong> {foundCoupon.consumed_count} / {foundCoupon.total_count} used
-                    </div>
-                  </div>
-
-                  {foundCoupon.status !== 'Consumed' && (
-                    <div className="flex justify-center">
-                      <button
-                        onClick={() => redeemCoupon(foundCoupon, 1)}
-                        className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors font-medium"
-                      >
-                        Redeem This Coupon
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Search Mode */}
-        {activeMode === 'search' && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Search by Phone Number</h2>
-
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="searchPhone" className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone Number
-                </label>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="searchValue" className="block text-sm font-medium text-gray-700 mb-2">
+                QR Code or Phone Number
+              </label>
+              <div className="space-y-3">
                 <div className="flex space-x-3">
                   <input
-                    type="tel"
-                    id="searchPhone"
-                    value={searchPhone}
-                    onChange={(e) => setSearchPhone(e.target.value)}
+                    type="text"
+                    id="searchValue"
+                    value={searchValue}
+                    onChange={(e) => setSearchValue(e.target.value)}
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter participant's phone number"
-                    onKeyPress={(e) => e.key === 'Enter' && searchParticipantsByPhone()}
+                    placeholder="Enter QR code value or phone number"
+                    onKeyPress={(e) => e.key === 'Enter' && performSearch()}
                   />
                   <button
-                    onClick={searchParticipantsByPhone}
+                    onClick={performSearch}
                     disabled={isSearching}
                     className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
                   >
                     {isSearching ? 'Searching...' : 'Search'}
                   </button>
-                  {searchPhone && (
+                  {searchValue && (
                     <button
                       onClick={clearSearch}
                       className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
@@ -527,67 +411,179 @@ const CouponRedemption: React.FC = () => {
                     </button>
                   )}
                 </div>
-              </div>
 
-              {/* Search Results */}
-              {searchResults.length > 0 && (
-                <div className="mt-6 space-y-4">
-                  <h3 className="text-lg font-medium text-gray-900">Search Results ({searchResults.length})</h3>
+                {/* Camera Scanner Toggle */}
+                <div className="flex justify-center">
+                  {showCamera ? (
+                    <button
+                      onClick={stopCameraScanning}
+                      className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors flex items-center space-x-2"
+                    >
+                      <span>⏹️</span>
+                      <span>Stop Camera</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={startCameraScanning}
+                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center space-x-2"
+                    >
+                      <span>📷</span>
+                      <span>Start Camera</span>
+                    </button>
+                  )}
+                </div>
 
-                  {searchResults.map((participant) => (
-                    <div key={participant.participant_id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="mb-3">
-                        <h4 className="font-medium text-gray-900">{participant.name}</h4>
-                        <p className="text-sm text-gray-600">📞 {participant.contact_number}</p>
-                      </div>
-
-                      {participant.Coupons && participant.Coupons.length > 0 ? (
-                        <div className="space-y-2">
-                          <h5 className="text-sm font-medium text-gray-700">Coupons ({participant.Coupons.length})</h5>
-                          {participant.Coupons.map((coupon) => (
-                            <div key={coupon.coupon_id} className="p-3 bg-gray-50 rounded border">
-                              <div className="flex justify-between items-start mb-2">
-                                <div className="flex-1">
-                                  <div className="text-sm">
-                                    <strong>{coupon.MealChoice?.meal_type}</strong> - {coupon.CouponRate?.rate_type} (₹{coupon.CouponRate?.price})
-                                  </div>
-                                  <div className="text-xs text-gray-600 mt-1">
-                                    Status: <span className={`px-1 py-0.5 rounded text-xs ${
-                                      coupon.status === 'Booked' ? 'bg-green-100 text-green-700' :
-                                      coupon.status === 'Partial' ? 'bg-yellow-100 text-yellow-700' :
-                                      'bg-red-100 text-red-700'
-                                    }`}>
-                                      {coupon.status}
-                                    </span>
-                                    {' • '}
-                                    Usage: {coupon.consumed_count}/{coupon.total_count}
-                                  </div>
-                                </div>
-
-                                {coupon.status !== 'Consumed' && (
-                                  <div className="flex items-center ml-4">
-                                    <button
-                                      onClick={() => redeemCoupon(coupon, 1)}
-                                      className="px-4 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors font-medium"
-                                    >
-                                      Redeem
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
+                {/* Camera Preview */}
+                {showCamera && (
+                  <div className="flex flex-col items-center space-y-3">
+                    <div className="relative border-2 border-green-500 rounded-lg overflow-hidden">
+                      <Webcam
+                        ref={webcamRef}
+                        audio={false}
+                        screenshotFormat="image/jpeg"
+                        width={400}
+                        height={300}
+                        videoConstraints={{
+                          width: 400,
+                          height: 300,
+                          facingMode: "environment" // Use back camera on mobile
+                        }}
+                        className="rounded-lg"
+                      />
+                      {isScanning && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="relative">
+                            <div className="w-48 h-48 border-2 border-green-400 border-dashed animate-pulse"></div>
+                            <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 bg-green-500 text-white text-xs px-2 py-1 rounded">
+                              Scanning...
                             </div>
-                          ))}
+                          </div>
                         </div>
-                      ) : (
-                        <div className="text-sm text-gray-500">No coupons found for this participant</div>
                       )}
                     </div>
-                  ))}
-                </div>
-              )}
+
+                    <div className="text-center">
+                      <p className="text-sm text-gray-600">
+                        {isScanning ? 'Scanning for QR codes automatically...' : 'Position QR code in the camera view'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Supports QR codes containing coupon codes or phone numbers
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
+
+            {/* Found Coupon by QR Code */}
+            {foundCoupon && (
+              <div className="mt-6 p-4 border border-gray-200 rounded-lg">
+                <h3 className="text-lg font-medium text-gray-900 mb-3">Coupon Found</h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <div className="text-sm font-medium text-blue-700">Participant</div>
+                    <div className="text-blue-900">{foundCoupon.Participant?.name || 'Unknown'}</div>
+                  </div>
+                  <div className="p-3 bg-green-50 rounded-lg">
+                    <div className="text-sm font-medium text-green-700">Meal Option</div>
+                    <div className="text-green-900">{foundCoupon.MealChoice?.meal_type || 'Not specified'}</div>
+                  </div>
+                  <div className="p-3 bg-purple-50 rounded-lg">
+                    <div className="text-sm font-medium text-purple-700">Rate & Price</div>
+                    <div className="text-purple-900">
+                      {foundCoupon.CouponRate?.rate_type || 'Unknown'} - ₹{foundCoupon.CouponRate?.price || 0}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-4">
+                  <div>
+                    <span className="text-sm font-medium text-gray-700">Status: </span>
+                    <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                      foundCoupon.status === 'Booked' ? 'bg-green-100 text-green-800' :
+                      foundCoupon.status === 'Partial' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {foundCoupon.status}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    <strong>Usage:</strong> {foundCoupon.consumed_count} / {foundCoupon.total_count} used
+                  </div>
+                </div>
+
+                {foundCoupon.status !== 'Consumed' && (
+                  <div className="flex justify-center">
+                    <button
+                      onClick={() => redeemCoupon(foundCoupon, 1)}
+                      className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors font-medium"
+                    >
+                      Redeem This Coupon
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Search Results by Phone */}
+            {searchResults.length > 0 && (
+              <div className="mt-6 space-y-4">
+                <h3 className="text-lg font-medium text-gray-900">Search Results ({searchResults.length})</h3>
+
+                {searchResults.map((participant) => (
+                  <div key={participant.participant_id} className="border border-gray-200 rounded-lg p-4">
+                    <div className="mb-3">
+                      <h4 className="font-medium text-gray-900">{participant.name}</h4>
+                      <p className="text-sm text-gray-600">📞 {participant.contact_number}</p>
+                    </div>
+
+                    {participant.Coupons && participant.Coupons.length > 0 ? (
+                      <div className="space-y-2">
+                        <h5 className="text-sm font-medium text-gray-700">Coupons ({participant.Coupons.length})</h5>
+                        {participant.Coupons.map((coupon) => (
+                          <div key={coupon.coupon_id} className="p-3 bg-gray-50 rounded border">
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="flex-1">
+                                <div className="text-sm">
+                                  <strong>{coupon.MealChoice?.meal_type}</strong> - {coupon.CouponRate?.rate_type} (₹{coupon.CouponRate?.price})
+                                </div>
+                                <div className="text-xs text-gray-600 mt-1">
+                                  Status: <span className={`px-1 py-0.5 rounded text-xs ${
+                                    coupon.status === 'Booked' ? 'bg-green-100 text-green-700' :
+                                    coupon.status === 'Partial' ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-red-100 text-red-700'
+                                  }`}>
+                                    {coupon.status}
+                                  </span>
+                                  {' • '}
+                                  Usage: {coupon.consumed_count}/{coupon.total_count}
+                                </div>
+                              </div>
+
+                              {coupon.status !== 'Consumed' && (
+                                <div className="flex items-center ml-4">
+                                  <button
+                                    onClick={() => redeemCoupon(coupon, 1)}
+                                    className="px-4 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors font-medium"
+                                  >
+                                    Redeem
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-500">No coupons found for this participant</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
         <div className="flex justify-between">
           <Link

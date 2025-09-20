@@ -45,7 +45,8 @@ export const getCouponByQR = async (req: AuthenticatedRequest, res: Response): P
   try {
     const { qrCode } = req.params;
 
-    const coupon = await Coupon.findOne({
+    // First, try to find coupon by QR code value (existing behavior)
+    let coupon = await Coupon.findOne({
       where: { qr_code_value: qrCode },
       include: [
         {
@@ -66,6 +67,50 @@ export const getCouponByQR = async (req: AuthenticatedRequest, res: Response): P
         }
       ]
     });
+
+    // If not found and the input looks like a phone number, search by phone
+    if (!coupon && /^\d{10,15}$/.test(qrCode)) {
+      const participant = await Participant.findOne({
+        where: {
+          contact_number: {
+            [require('sequelize').Op.like]: `%${qrCode}%`
+          }
+        },
+        include: [{
+          model: Coupon,
+          include: [
+            {
+              model: Event,
+              attributes: ['name', 'venue', 'start_date', 'end_date']
+            },
+            {
+              model: CouponRate,
+              attributes: ['rate_type', 'price']
+            },
+            {
+              model: MealChoice,
+              attributes: ['meal_type']
+            }
+          ]
+        }]
+      });
+
+      // If participant found and has coupons, return the first coupon
+      if (participant && (participant as any).Coupons && (participant as any).Coupons.length > 0) {
+        coupon = (participant as any).Coupons[0];
+        // The coupon should already have Event, CouponRate, and MealChoice included
+        // We need to add the Participant info manually since it's not included in the coupon query
+        const couponData = (coupon as any)?.dataValues ? (coupon as any).dataValues : coupon;
+        coupon = {
+          ...couponData,
+          Participant: {
+            name: participant.name,
+            address: participant.address,
+            contact_number: participant.contact_number
+          } as any
+        } as any;
+      }
+    }
 
     if (!coupon) {
       res.status(404).json({ error: 'Coupon not found' });
