@@ -290,3 +290,42 @@ export const deleteEvent = async (req: AuthenticatedRequest, res: Response): Pro
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+export const getPublicEvents = async (req: any, res: Response): Promise<void> => {
+  try {
+    const now = new Date();
+
+    const events = await Event.findAll({
+      where: {
+        end_date: {
+          [require('sequelize').Op.gte]: now
+        }
+      },
+      include: [
+        { model: CouponRate },
+        { model: MealChoice }
+      ],
+      order: [['start_date', 'ASC']],
+      limit: 50
+    });
+
+    const publicEvents = events.map(event => {
+      const eventData = event.toJSON() as any;
+      return {
+        event_id: eventData.event_id,
+        name: eventData.name,
+        description: eventData.description,
+        venue: eventData.venue,
+        start_date: eventData.start_date,
+        end_date: eventData.end_date,
+        CouponRates: eventData.CouponRates,
+        MealChoices: eventData.MealChoices
+      };
+    });
+
+    res.json(publicEvents);
+  } catch (error) {
+    console.error('Get public events error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};

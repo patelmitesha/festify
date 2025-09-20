@@ -15,6 +15,7 @@ import CouponView from './pages/CouponView';
 import EventReports from './pages/EventReports';
 import UserManagement from './pages/UserManagement';
 import RequestParticipation from './pages/RequestParticipation';
+import UpcomingEvents from './pages/UpcomingEvents';
 
 function App() {
   return (
@@ -25,7 +26,9 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/upcoming-events" element={<UpcomingEvents />} />
             <Route path="/request-participation" element={<RequestParticipation />} />
+            <Route path="/request-participation/:eventId" element={<RequestParticipation />} />
             <Route path="/coupon/:qrCode" element={<CouponView />} />
             <Route
               path="/dashboard"

@@ -5,11 +5,16 @@ import {
   getUserEvents,
   getEventDetails,
   updateEvent,
-  deleteEvent
+  deleteEvent,
+  getPublicEvents
 } from '../controllers/eventController';
 
 const router = Router();
 
+// Public routes (no authentication required)
+router.get('/public', getPublicEvents);
+
+// Protected routes (authentication required)
 router.post('/', authenticateToken, createEvent);
 router.get('/', authenticateToken, getUserEvents);
 router.get('/:eventId', authenticateToken, getEventDetails);

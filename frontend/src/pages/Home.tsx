@@ -155,7 +155,7 @@ const Home: React.FC = () => {
               Submit a participation request for any upcoming event. Event organizers can review and approve your request to join their festivities.
             </p>
             <Link
-              to="/request-participation"
+              to="/upcoming-events"
               className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg hover:from-orange-600 hover:to-red-700 transition-all duration-300 font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1"
             >
               Request to Participate →
