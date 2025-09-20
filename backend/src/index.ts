@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import eventRoutes from './routes/events';
 import participantRoutes from './routes/participants';
+import participationRequestRoutes from './routes/participationRequests';
 import couponRoutes from './routes/coupons';
 import reportRoutes from './routes/reports';
 import userManagementRoutes from './routes/userManagement';
@@ -33,6 +34,7 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/events', participantRoutes);
+app.use('/api/events', participationRequestRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/users', userManagementRoutes);

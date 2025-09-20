@@ -6,6 +6,7 @@ import Participant from './Participant';
 import Coupon from './Coupon';
 import Redemption from './Redemption';
 import EventRepresentative from './EventRepresentative';
+import ParticipationRequest from './ParticipationRequest';
 
 // Set up associations
 User.hasMany(Event, { foreignKey: 'user_id' });
@@ -28,4 +29,5 @@ export {
   Coupon,
   Redemption,
   EventRepresentative,
+  ParticipationRequest,
 };

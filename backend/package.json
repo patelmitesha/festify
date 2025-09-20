@@ -7,6 +7,8 @@
     "build": "tsc",
     "dev": "nodemon --exec ts-node src/index.ts",
     "start": "node dist/index.js",
+    "db:sync": "ts-node src/utils/syncDatabase.ts",
+    "db:check": "ts-node -e \"import('./src/utils/syncDatabase').then(m => m.checkParticipationRequestsTable()).then(() => process.exit(0)).catch(e => {console.error(e); process.exit(1)})\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

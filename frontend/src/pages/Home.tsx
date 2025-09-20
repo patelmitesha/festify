@@ -141,6 +141,29 @@ const Home: React.FC = () => {
         </div>
       </div>
 
+      {/* Participate Section */}
+      <div className="py-20 bg-gradient-to-br from-orange-50 via-red-50 to-pink-50">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <div className="bg-white rounded-2xl shadow-xl p-8 md:p-12">
+            <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl flex items-center justify-center text-white text-3xl mx-auto mb-6">
+              🎉
+            </div>
+            <h2 className="text-4xl font-bold text-gray-900 mb-6">
+              Want to Join an Event?
+            </h2>
+            <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+              Submit a participation request for any upcoming event. Event organizers can review and approve your request to join their festivities.
+            </p>
+            <Link
+              to="/request-participation"
+              className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg hover:from-orange-600 hover:to-red-700 transition-all duration-300 font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+            >
+              Request to Participate →
+            </Link>
+          </div>
+        </div>
+      </div>
+
       {/* How It Works Section */}
       <div className="py-20 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

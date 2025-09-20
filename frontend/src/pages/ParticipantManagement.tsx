@@ -4,11 +4,24 @@ import { Participant, Event } from '../types';
 import api from '../services/api';
 import Layout from '../components/Layout';
 
+interface ParticipationRequest {
+  request_id: number;
+  event_id: number;
+  name: string;
+  address?: string;
+  contact_number?: string;
+  email?: string;
+  message?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+}
+
 const ParticipantManagement: React.FC = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const [event, setEvent] = useState<Event | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [filteredParticipants, setFilteredParticipants] = useState<Participant[]>([]);
+  const [participationRequests, setParticipationRequests] = useState<ParticipationRequest[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -51,7 +64,7 @@ const ParticipantManagement: React.FC = () => {
       const eventResponse = await api.get(`/events/${eventId}`);
       setEvent(eventResponse.data.event);
 
-      // Fetch participants (this endpoint may not exist yet)
+      // Fetch participants
       try {
         const participantsResponse = await api.get(`/events/${eventId}/participants`);
         setParticipants(participantsResponse.data);
@@ -64,6 +77,16 @@ const ParticipantManagement: React.FC = () => {
         } else {
           throw participantsErr;
         }
+      }
+
+      // Fetch pending participation requests
+      try {
+        const requestsResponse = await api.get(`/events/${eventId}/participation-requests?status=pending`);
+        setParticipationRequests(requestsResponse.data);
+      } catch (requestsErr: any) {
+        // If endpoint doesn't exist or no requests, set empty array
+        console.log('No participation requests or endpoint not available');
+        setParticipationRequests([]);
       }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to fetch event or participants');
@@ -224,6 +247,37 @@ const ParticipantManagement: React.FC = () => {
     }
   };
 
+  const handleApproveRequest = async (requestId: number) => {
+    try {
+      const response = await api.post(`/events/${eventId}/participation-requests/${requestId}/approve`);
+
+      // Remove from requests list
+      setParticipationRequests(prev => prev.filter(req => req.request_id !== requestId));
+
+      // Add to participants list if participant was created
+      if (response.data.participant) {
+        setParticipants(prev => [...prev, response.data.participant]);
+      }
+
+      setError('');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to approve participation request');
+    }
+  };
+
+  const handleRejectRequest = async (requestId: number, reason?: string) => {
+    try {
+      await api.post(`/events/${eventId}/participation-requests/${requestId}/reject`, { reason });
+
+      // Remove from requests list
+      setParticipationRequests(prev => prev.filter(req => req.request_id !== requestId));
+
+      setError('');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to reject participation request');
+    }
+  };
+
   if (isLoading) {
     return (
       <Layout>
@@ -279,6 +333,80 @@ const ParticipantManagement: React.FC = () => {
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded">
             <pre className="whitespace-pre-wrap text-sm">{error}</pre>
+          </div>
+        )}
+
+        {/* Participation Requests */}
+        {participationRequests.length > 0 && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+            <h2 className="text-xl font-semibold text-yellow-800 mb-4">
+              Pending Participation Requests ({participationRequests.length})
+            </h2>
+            <div className="space-y-4">
+              {participationRequests.map((request) => (
+                <div
+                  key={request.request_id}
+                  className="bg-white border border-yellow-200 rounded-lg p-4"
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        {request.name}
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+                        {request.email && (
+                          <div>
+                            <span className="font-medium">Email:</span> {request.email}
+                          </div>
+                        )}
+                        {request.contact_number && (
+                          <div>
+                            <span className="font-medium">Phone:</span> {request.contact_number}
+                          </div>
+                        )}
+                        {request.address && (
+                          <div className="md:col-span-2">
+                            <span className="font-medium">Address:</span> {request.address}
+                          </div>
+                        )}
+                        {request.message && (
+                          <div className="md:col-span-2">
+                            <span className="font-medium">Message:</span> {request.message}
+                          </div>
+                        )}
+                        <div className="md:col-span-2">
+                          <span className="font-medium">Requested:</span>{' '}
+                          {new Date(request.created_at).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-col space-y-2 ml-4">
+                      <button
+                        onClick={() => handleApproveRequest(request.request_id)}
+                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => {
+                          const reason = window.prompt('Reason for rejection (optional):');
+                          handleRejectRequest(request.request_id, reason || undefined);
+                        }}
+                        className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm font-medium"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
