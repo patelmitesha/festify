@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { Coupon, Event } from '../types';
 import api from '../services/api';
 import Layout from '../components/Layout';
 
 const CouponManagement: React.FC = () => {
   const { eventId } = useParams<{ eventId: string }>();
+  const [searchParams] = useSearchParams();
+  const participantFilter = searchParams.get('participant');
   const [event, setEvent] = useState<Event | null>(null);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [allCoupons, setAllCoupons] = useState<Coupon[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -15,7 +18,8 @@ const CouponManagement: React.FC = () => {
     if (eventId) {
       fetchEventAndCoupons();
     }
-  }, [eventId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, participantFilter]);
 
   const fetchEventAndCoupons = async () => {
     try {
@@ -27,11 +31,23 @@ const CouponManagement: React.FC = () => {
       // Fetch coupons
       try {
         const couponsResponse = await api.get(`/coupons/events/${eventId}`);
-        setCoupons(couponsResponse.data.coupons);
+        const fetchedCoupons = couponsResponse.data.coupons;
+        setAllCoupons(fetchedCoupons);
+
+        // Filter coupons if participant filter is provided
+        if (participantFilter) {
+          const filteredCoupons = fetchedCoupons.filter((coupon: Coupon) =>
+            coupon.participant_id === parseInt(participantFilter)
+          );
+          setCoupons(filteredCoupons);
+        } else {
+          setCoupons(fetchedCoupons);
+        }
       } catch (couponsErr: any) {
         // If coupons endpoint doesn't exist, set empty array
         if (couponsErr.response?.status === 404) {
           setCoupons([]);
+          setAllCoupons([]);
         } else {
           throw couponsErr;
         }
@@ -100,6 +116,35 @@ _Powered by Festify_`;
     window.open(whatsappUrl, '_blank');
   };
 
+  const handleDeleteCoupon = async (couponId: number) => {
+    const coupon = coupons.find(c => c.coupon_id === couponId);
+    if (!coupon) return;
+
+    // Check if coupon has been consumed
+    if (coupon.consumed_count > 0) {
+      setError(`Cannot delete coupon that has been ${coupon.consumed_count === coupon.total_count ? 'fully' : 'partially'} consumed`);
+      return;
+    }
+
+    const confirmMessage = `Are you sure you want to delete this coupon?\n\nParticipant: ${coupon.Participant?.name}\nMeal: ${coupon.MealChoice?.meal_type}\nRate: ${coupon.CouponRate?.rate_type}\n\nThis action cannot be undone.`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      await api.delete(`/coupons/${couponId}`);
+
+      // Update both filtered and all coupons lists
+      setCoupons(prev => prev.filter(c => c.coupon_id !== couponId));
+      setAllCoupons(prev => prev.filter(c => c.coupon_id !== couponId));
+
+      setError(''); // Clear any previous errors
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to delete coupon');
+    }
+  };
+
   // Note: Bulk PDF download not implemented in backend yet
 
   if (isLoading) {
@@ -137,6 +182,19 @@ _Powered by Festify_`;
             <p className="text-gray-600 mt-1">
               {event?.name} - View and manage generated coupons
             </p>
+            {participantFilter && (
+              <div className="mt-2 flex items-center space-x-2">
+                <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                  Filtered by Participant ID: {participantFilter}
+                </span>
+                <Link
+                  to={`/events/${eventId}/coupons`}
+                  className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm hover:bg-gray-200 transition-colors"
+                >
+                  Show All Coupons
+                </Link>
+              </div>
+            )}
           </div>
           <div className="flex space-x-3">
             <Link
@@ -203,11 +261,15 @@ _Powered by Festify_`;
 
         {/* Coupon Statistics */}
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Coupon Statistics</h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">
+            Coupon Statistics {participantFilter && '(Filtered)'}
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="text-center p-4 bg-blue-50 rounded-lg">
               <div className="text-3xl font-bold text-blue-600">{coupons.length}</div>
-              <div className="text-sm text-blue-700 font-medium">Total Coupons</div>
+              <div className="text-sm text-blue-700 font-medium">
+                {participantFilter ? 'Participant Coupons' : 'Total Coupons'}
+              </div>
             </div>
             <div className="text-center p-4 bg-green-50 rounded-lg">
               <div className="text-3xl font-bold text-green-600">
@@ -228,26 +290,39 @@ _Powered by Festify_`;
               <div className="text-sm text-red-700 font-medium">Fully Used</div>
             </div>
           </div>
+          {participantFilter && (
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+              <p className="text-sm text-blue-700">
+                <strong>Note:</strong> Currently showing coupons for participant ID {participantFilter} only.
+                Total event coupons: {allCoupons.length}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Coupons List */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              Generated Coupons ({coupons.length})
+              {participantFilter ? `Participant Coupons (${coupons.length})` : `Generated Coupons (${coupons.length})`}
             </h2>
 
             {coupons.length === 0 ? (
               <div className="text-center py-12">
-                <div className="text-gray-500 text-lg mb-4">No coupons generated yet</div>
+                <div className="text-gray-500 text-lg mb-4">
+                  {participantFilter ? 'No coupons found for this participant' : 'No coupons generated yet'}
+                </div>
                 <p className="text-gray-600 mb-6">
-                  Coupons are automatically generated when participants are added to the event with their meal and rate selections.
+                  {participantFilter
+                    ? 'This participant may not have any coupons yet. You can add coupons from the participants page.'
+                    : 'Coupons are automatically generated when participants are added to the event with their meal and rate selections.'
+                  }
                 </p>
                 <Link
                   to={`/events/${eventId}/participants`}
                   className="inline-block px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
                 >
-                  Add Participants to Generate Coupons
+                  {participantFilter ? 'Back to Participants' : 'Add Participants to Generate Coupons'}
                 </Link>
               </div>
             ) : (
@@ -351,6 +426,16 @@ _Powered by Festify_`;
                           >
                             <span>📱</span>
                             <span>Send WhatsApp</span>
+                          </button>
+                        )}
+
+                        {/* Delete Button - only show if coupon hasn't been consumed */}
+                        {coupon.consumed_count === 0 && (
+                          <button
+                            onClick={() => handleDeleteCoupon(coupon.coupon_id)}
+                            className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
+                          >
+                            Delete Coupon
                           </button>
                         )}
                       </div>

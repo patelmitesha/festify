@@ -8,6 +8,8 @@ const ParticipantManagement: React.FC = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const [event, setEvent] = useState<Event | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [filteredParticipants, setFilteredParticipants] = useState<Participant[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
@@ -18,6 +20,8 @@ const ParticipantManagement: React.FC = () => {
   });
   const [couponBookings, setCouponBookings] = useState<{rate_id: number, meal_id: number, quantity: number}[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showCouponForm, setShowCouponForm] = useState<{[key: number]: boolean}>({});
+  const [couponFormData, setCouponFormData] = useState<{[key: number]: {rate_id: number, meal_id: number, quantity: number}}>({});
 
   useEffect(() => {
     if (eventId) {
@@ -25,6 +29,20 @@ const ParticipantManagement: React.FC = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
+
+  // Filter participants based on search term
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredParticipants(participants);
+    } else {
+      const filtered = participants.filter(participant =>
+        participant.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        participant.contact_number?.includes(searchTerm) ||
+        participant.address?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredParticipants(filtered);
+    }
+  }, [participants, searchTerm]);
 
   const fetchEventAndParticipants = async () => {
     try {
@@ -37,10 +55,12 @@ const ParticipantManagement: React.FC = () => {
       try {
         const participantsResponse = await api.get(`/events/${eventId}/participants`);
         setParticipants(participantsResponse.data);
+        setFilteredParticipants(participantsResponse.data);
       } catch (participantsErr: any) {
         // If participants endpoint doesn't exist, set empty array
         if (participantsErr.response?.status === 404) {
           setParticipants([]);
+          setFilteredParticipants([]);
         } else {
           throw participantsErr;
         }
@@ -150,6 +170,60 @@ const ParticipantManagement: React.FC = () => {
     }
   };
 
+  const toggleCouponForm = (participantId: number) => {
+    setShowCouponForm(prev => ({
+      ...prev,
+      [participantId]: !prev[participantId]
+    }));
+
+    // Initialize form data if opening for the first time
+    if (!showCouponForm[participantId] && !couponFormData[participantId]) {
+      setCouponFormData(prev => ({
+        ...prev,
+        [participantId]: {
+          rate_id: event?.CouponRates?.[0]?.rate_id || 0,
+          meal_id: event?.MealChoices?.[0]?.meal_id || 0,
+          quantity: 1
+        }
+      }));
+    }
+  };
+
+  const updateCouponFormData = (participantId: number, field: 'rate_id' | 'meal_id' | 'quantity', value: number) => {
+    setCouponFormData(prev => ({
+      ...prev,
+      [participantId]: {
+        ...prev[participantId],
+        [field]: value
+      }
+    }));
+  };
+
+  const handleAddCoupon = async (participantId: number) => {
+    if (!eventId || !couponFormData[participantId]) return;
+
+    try {
+      const response = await api.post(`/events/${eventId}/participants/${participantId}/coupons`, couponFormData[participantId]);
+
+      // Update the participant in the list
+      setParticipants(prev => prev.map(p =>
+        p.participant_id === participantId ? response.data.participant : p
+      ));
+
+      // Close the form and reset data
+      setShowCouponForm(prev => ({ ...prev, [participantId]: false }));
+      setCouponFormData(prev => ({ ...prev, [participantId]: {
+        rate_id: event?.CouponRates?.[0]?.rate_id || 0,
+        meal_id: event?.MealChoices?.[0]?.meal_id || 0,
+        quantity: 1
+      }}));
+
+      setError(''); // Clear any previous errors
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to add coupon');
+    }
+  };
+
   if (isLoading) {
     return (
       <Layout>
@@ -186,12 +260,20 @@ const ParticipantManagement: React.FC = () => {
               {event?.name} - Manage event participants
             </p>
           </div>
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-          >
-            Add Participant
-          </button>
+          <div className="flex space-x-3">
+            <Link
+              to={`/events/${eventId}/coupons`}
+              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+            >
+              View Coupons
+            </Link>
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Add Participant
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -351,23 +433,58 @@ const ParticipantManagement: React.FC = () => {
         {/* Participants List */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              Participants ({participants.length})
-            </h2>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">
+                Participants ({filteredParticipants.length}{participants.length !== filteredParticipants.length ? ` of ${participants.length}` : ''})
+              </h2>
+              <div className="flex-1 max-w-md">
+                <input
+                  type="text"
+                  placeholder="Search by name, phone, or address..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
 
             {participants.length === 0 ? (
               <div className="text-center py-8">
                 <div className="text-gray-500 text-lg mb-4">No participants yet</div>
+                <p className="text-gray-600 mb-4">
+                  Add participants to automatically generate event coupons
+                </p>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setShowAddForm(true)}
+                    className="block mx-auto px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
+                  >
+                    Add Your First Participant
+                  </button>
+                  <Link
+                    to={`/events/${eventId}/coupons`}
+                    className="block text-green-600 hover:text-green-500 text-sm"
+                  >
+                    View generated coupons →
+                  </Link>
+                </div>
+              </div>
+            ) : filteredParticipants.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="text-gray-500 text-lg mb-4">No participants found</div>
+                <p className="text-gray-600 mb-4">
+                  Try adjusting your search criteria
+                </p>
                 <button
-                  onClick={() => setShowAddForm(true)}
-                  className="text-blue-600 hover:text-blue-500"
+                  onClick={() => setSearchTerm('')}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
                 >
-                  Add your first participant
+                  Clear Search
                 </button>
               </div>
             ) : (
               <div className="space-y-4">
-                {participants.map((participant) => (
+                {filteredParticipants.map((participant) => (
                   <div
                     key={participant.participant_id}
                     className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors"
@@ -387,39 +504,63 @@ const ParticipantManagement: React.FC = () => {
                           Participant ID: #{participant.participant_id}
                         </p>
 
-                        {/* Display Coupons */}
+                        {/* Display Coupon Summary */}
                         {participant.Coupons && participant.Coupons.length > 0 && (
                           <div className="mt-3">
                             <h4 className="text-sm font-medium text-gray-700 mb-2">
-                              Coupons ({participant.Coupons.length})
+                              Coupon Summary
                             </h4>
-                            <div className="space-y-1">
-                              {participant.Coupons.map((coupon) => (
-                                <div key={coupon.coupon_id} className="text-xs bg-gray-50 rounded p-2">
+                            {(() => {
+                              const bookedCount = participant.Coupons.filter(c => c.status === 'Booked').length;
+                              const partialCount = participant.Coupons.filter(c => c.status === 'Partial').length;
+                              const consumedCount = participant.Coupons.filter(c => c.status === 'Consumed').length;
+                              const totalCount = participant.Coupons.length;
+                              const totalValue = participant.Coupons.reduce((sum, c) => sum + (Number(c.CouponRate?.price) || 0), 0);
+
+                              return (
+                                <div className="bg-gray-50 rounded p-3 text-xs space-y-2">
                                   <div className="flex justify-between items-center">
-                                    <span className="font-medium">
-                                      {coupon.MealChoice?.meal_type} - {coupon.CouponRate?.rate_type}
-                                    </span>
-                                    <span className={`px-1 py-0.5 rounded text-xs ${
-                                      coupon.status === 'Booked' ? 'bg-green-100 text-green-700' :
-                                      coupon.status === 'Consumed' ? 'bg-gray-100 text-gray-700' :
-                                      'bg-yellow-100 text-yellow-700'
-                                    }`}>
-                                      {coupon.status}
-                                    </span>
+                                    <span className="font-medium">Total Coupons:</span>
+                                    <span className="font-semibold">{totalCount}</span>
                                   </div>
-                                  <div className="flex justify-between text-gray-500 mt-1">
-                                    <span>₹{coupon.CouponRate?.price}</span>
-                                    <span>{coupon.consumed_count}/{coupon.total_count} used</span>
+                                  <div className="grid grid-cols-3 gap-2 text-center">
+                                    <div className="bg-green-100 text-green-700 rounded p-2">
+                                      <div className="font-semibold">{bookedCount}</div>
+                                      <div>Available</div>
+                                    </div>
+                                    <div className="bg-yellow-100 text-yellow-700 rounded p-2">
+                                      <div className="font-semibold">{partialCount}</div>
+                                      <div>Partial</div>
+                                    </div>
+                                    <div className="bg-gray-100 text-gray-700 rounded p-2">
+                                      <div className="font-semibold">{consumedCount}</div>
+                                      <div>Used</div>
+                                    </div>
+                                  </div>
+                                  <div className="flex justify-between items-center pt-1 border-t border-gray-200">
+                                    <span className="font-medium">Total Value:</span>
+                                    <span className="font-semibold text-green-600">₹{totalValue}</span>
                                   </div>
                                 </div>
-                              ))}
-                            </div>
+                              );
+                            })()}
                           </div>
                         )}
                       </div>
 
                       <div className="flex flex-col space-y-2 ml-4">
+                        <button
+                          onClick={() => toggleCouponForm(participant.participant_id)}
+                          className="px-3 py-1 text-sm bg-purple-100 text-purple-700 rounded hover:bg-purple-200 transition-colors"
+                        >
+                          {showCouponForm[participant.participant_id] ? 'Cancel' : 'Add Coupon'}
+                        </button>
+                        <Link
+                          to={`/events/${eventId}/coupons?participant=${participant.participant_id}`}
+                          className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors text-center"
+                        >
+                          View Coupons
+                        </Link>
                         <button
                           onClick={() => downloadParticipantMobilePDF(participant.participant_id, participant.name)}
                           className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
@@ -434,6 +575,72 @@ const ParticipantManagement: React.FC = () => {
                         </button>
                       </div>
                     </div>
+
+                    {/* Individual Coupon Form */}
+                    {showCouponForm[participant.participant_id] && (
+                      <div className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                        <h4 className="text-sm font-medium text-purple-900 mb-3">Add Coupon for {participant.name}</h4>
+
+                        {(!event?.CouponRates?.length || !event?.MealChoices?.length) ? (
+                          <p className="text-sm text-gray-500">
+                            Please ensure the event has both meal choices and coupon rates configured.
+                          </p>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">Meal Option</label>
+                              <select
+                                value={couponFormData[participant.participant_id]?.meal_id || ''}
+                                onChange={(e) => updateCouponFormData(participant.participant_id, 'meal_id', parseInt(e.target.value))}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              >
+                                {event.MealChoices.map((meal) => (
+                                  <option key={meal.meal_id} value={meal.meal_id}>
+                                    {meal.meal_type}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">Rate Type</label>
+                              <select
+                                value={couponFormData[participant.participant_id]?.rate_id || ''}
+                                onChange={(e) => updateCouponFormData(participant.participant_id, 'rate_id', parseInt(e.target.value))}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              >
+                                {event.CouponRates.map((rate) => (
+                                  <option key={rate.rate_id} value={rate.rate_id}>
+                                    {rate.rate_type} - ₹{rate.price}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">Quantity</label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="10"
+                                value={couponFormData[participant.participant_id]?.quantity || 1}
+                                onChange={(e) => updateCouponFormData(participant.participant_id, 'quantity', parseInt(e.target.value))}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              />
+                            </div>
+
+                            <div className="flex items-end">
+                              <button
+                                onClick={() => handleAddCoupon(participant.participant_id)}
+                                className="w-full px-3 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 transition-colors"
+                              >
+                                Add Coupon
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

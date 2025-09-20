@@ -513,3 +513,86 @@ export const generateParticipantMobilePDF = async (req: AuthenticatedRequest, re
     res.status(500).json({ error: 'Failed to generate PDF' });
   }
 };
+
+export const addCouponToParticipant = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { eventId, participantId } = req.params;
+    const { rate_id, meal_id, quantity = 1 } = req.body;
+    const user_id = req.user.user_id;
+
+    const event = await checkEventAccess(eventId, user_id);
+
+    if (!event) {
+      res.status(404).json({ error: 'Event not found or access denied' });
+      return;
+    }
+
+    // Verify participant exists in this event
+    const participant = await Participant.findOne({
+      where: {
+        participant_id: participantId,
+        event_id: eventId
+      }
+    });
+
+    if (!participant) {
+      res.status(404).json({ error: 'Participant not found in this event' });
+      return;
+    }
+
+    // Verify rate and meal exist for this event
+    const rate = await CouponRate.findOne({
+      where: { rate_id, event_id: eventId }
+    });
+
+    const meal = await MealChoice.findOne({
+      where: { meal_id, event_id: eventId }
+    });
+
+    if (!rate || !meal) {
+      res.status(400).json({ error: 'Invalid rate or meal choice for this event' });
+      return;
+    }
+
+    const coupons = [];
+    for (let i = 0; i < quantity; i++) {
+      const qrCodeValue = generateCouponId();
+      const qrCodeLink = `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/coupons/view/${qrCodeValue}`;
+
+      const coupon = await Coupon.create({
+        participant_id: parseInt(participantId),
+        event_id: parseInt(eventId),
+        rate_id,
+        meal_id,
+        qr_code_value: qrCodeValue,
+        qr_code_link: qrCodeLink,
+        status: 'Booked',
+        consumed_count: 0,
+        total_count: 1,
+      });
+
+      coupons.push(coupon);
+    }
+
+    // Return updated participant with all coupons
+    const updatedParticipant = await Participant.findByPk(participantId, {
+      include: [{
+        model: Coupon,
+        include: [
+          { model: CouponRate },
+          { model: MealChoice }
+        ]
+      }]
+    });
+
+    res.status(201).json({
+      message: `${quantity} coupon(s) added successfully`,
+      participant: updatedParticipant,
+      couponsGenerated: coupons.length,
+      newCoupons: coupons
+    });
+  } catch (error) {
+    console.error('Add coupon to participant error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};

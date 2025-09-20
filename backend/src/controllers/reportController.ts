@@ -3,6 +3,7 @@ import { Event, Coupon, CouponRate, MealChoice, Participant } from '../models';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { Sequelize } from 'sequelize';
 import PDFDocument from 'pdfkit';
+import * as XLSX from 'xlsx';
 
 export const getEventSummary = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -157,34 +158,45 @@ export const exportEventReport = async (req: AuthenticatedRequest, res: Response
 
       doc.end();
     } else {
-      const csvData = [
-        'Participant Name,Address,Contact,Meal Type,Rate Type,Price,Status,Consumed Count,Total Count,QR Code'
+      // Excel export
+      const worksheetData = [
+        ['Participant Name', 'Address', 'Contact', 'Meal Type', 'Rate Type', 'Price', 'Status', 'Consumed Count', 'Total Count', 'QR Code']
       ];
 
       coupons.forEach(coupon => {
-        csvData.push([
+        worksheetData.push([
           // @ts-ignore
-          coupon.Participant?.name,
+          coupon.Participant?.name || '',
           // @ts-ignore
           coupon.Participant?.address || '',
           // @ts-ignore
           coupon.Participant?.contact_number || '',
           // @ts-ignore
-          coupon.MealChoice?.meal_type,
+          coupon.MealChoice?.meal_type || '',
           // @ts-ignore
-          coupon.CouponRate?.rate_type,
+          coupon.CouponRate?.rate_type || '',
           // @ts-ignore
-          coupon.CouponRate?.price,
+          coupon.CouponRate?.price || 0,
           coupon.status,
-          coupon.consumed_count,
-          coupon.total_count,
+          coupon.consumed_count.toString(),
+          coupon.total_count.toString(),
           coupon.qr_code_value
-        ].join(','));
+        ]);
       });
 
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename="${event.name}-report.csv"`);
-      res.send(csvData.join('\n'));
+      // Create workbook and worksheet
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Coupon Report');
+
+      // Generate Excel buffer
+      const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${event.name}-report.xlsx"`);
+      res.send(excelBuffer);
     }
   } catch (error) {
     console.error('Export report error:', error);

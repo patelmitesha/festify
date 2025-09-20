@@ -78,7 +78,7 @@ const EventReports: React.FC = () => {
     fetchEventAndReports(true);
   };
 
-  const exportReport = async (format: 'pdf' | 'csv') => {
+  const exportReport = async (format: 'pdf' | 'excel') => {
     if (!eventId) return;
 
     try {
@@ -159,10 +159,10 @@ const EventReports: React.FC = () => {
                 Export PDF
               </button>
               <button
-                onClick={() => exportReport('csv')}
+                onClick={() => exportReport('excel')}
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
               >
-                Export CSV
+                Export Excel
               </button>
             </div>
             {lastUpdated && (

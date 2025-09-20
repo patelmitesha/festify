@@ -7,7 +7,8 @@ import {
   viewCouponByQR,
   generateCouponPDF,
   generateSingleCouponPDF,
-  getEventCoupons
+  getEventCoupons,
+  deleteCoupon
 } from '../controllers/couponController';
 import {
   redeemCoupon,
@@ -23,6 +24,7 @@ router.post('/redeem/:qrCode', authenticateToken, requirePermission('redeem_coup
 router.get('/events/:eventId', authenticateToken, checkEventAccess, getEventCoupons);
 router.get('/events/:eventId/pdf/:participantId', authenticateToken, checkEventAccess, generateCouponPDF);
 router.get('/pdf/:couponId', authenticateToken, generateSingleCouponPDF);
+router.delete('/:couponId', authenticateToken, requirePermission('add_participants'), deleteCoupon);
 router.get('/events/:eventId/redemptions', authenticateToken, checkEventAccess, getCouponRedemptions);
 
 export default router;

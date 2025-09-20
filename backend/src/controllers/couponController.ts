@@ -466,3 +466,62 @@ export const getEventCoupons = async (req: AuthenticatedRequest, res: Response):
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+export const deleteCoupon = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { couponId } = req.params;
+    const user_id = req.user.user_id;
+
+    // Find the coupon and verify access through event ownership
+    const coupon = await Coupon.findOne({
+      where: { coupon_id: couponId },
+      include: [
+        {
+          model: Event,
+          attributes: ['event_id', 'user_id', 'name']
+        },
+        {
+          model: Participant,
+          attributes: ['participant_id', 'name']
+        }
+      ]
+    });
+
+    if (!coupon) {
+      res.status(404).json({ error: 'Coupon not found' });
+      return;
+    }
+
+    // Check if user has access to this coupon through event ownership or representative role
+    const event = await checkEventAccess(coupon.event_id.toString(), user_id);
+    if (!event) {
+      res.status(403).json({ error: 'Access denied - you do not have permission to delete this coupon' });
+      return;
+    }
+
+    // Check if coupon has been consumed
+    if (coupon.consumed_count > 0) {
+      res.status(400).json({
+        error: 'Cannot delete coupon that has been partially or fully consumed',
+        consumed_count: coupon.consumed_count,
+        total_count: coupon.total_count
+      });
+      return;
+    }
+
+    // Delete the coupon
+    await coupon.destroy();
+
+    res.json({
+      message: 'Coupon deleted successfully',
+      deleted_coupon: {
+        coupon_id: coupon.coupon_id,
+        participant_name: coupon.Participant?.name,
+        event_name: (coupon as any).Event?.name
+      }
+    });
+  } catch (error) {
+    console.error('Delete coupon error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
