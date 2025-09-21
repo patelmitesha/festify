@@ -27,6 +27,7 @@ export interface ParticipantAttributes {
   name: string;
   address?: string;
   contact_number?: string;
+  email?: string;
 }
 
 class Participant extends Model<ParticipantAttributes> implements ParticipantAttributes {
@@ -35,6 +36,7 @@ class Participant extends Model<ParticipantAttributes> implements ParticipantAtt
   public name!: string;
   public address?: string;
   public contact_number?: string;
+  public email?: string;
 
   // Association properties
   public Coupons?: Coupon[];
@@ -65,6 +67,10 @@ Participant.init(
     },
     contact_number: {
       type: DataTypes.STRING(20),
+      allowNull: true,
+    },
+    email: {
+      type: DataTypes.STRING(100),
       allowNull: true,
     },
   },

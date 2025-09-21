@@ -9,7 +9,7 @@ import { generateCouponId } from '../utils/qr';
 export const submitParticipationRequest = async (req: Request, res: Response) => {
   try {
     const { eventId } = req.params;
-    const { name, address, contact_number, email, message } = req.body;
+    const { name, address, contact_number, email, message, coupon_bookings } = req.body;
 
     // Validate required fields
     if (!name || !name.trim()) {
@@ -30,6 +30,7 @@ export const submitParticipationRequest = async (req: Request, res: Response) =>
       contact_number: contact_number?.trim(),
       email: email?.trim(),
       message: message?.trim(),
+      coupon_bookings: coupon_bookings ? JSON.stringify(coupon_bookings) : undefined,
       status: 'pending'
     });
 
@@ -96,7 +97,8 @@ export const approveParticipationRequest = async (req: Request, res: Response) =
       event_id: parseInt(eventId),
       name: participationRequest.name,
       address: participationRequest.address,
-      contact_number: participationRequest.contact_number
+      contact_number: participationRequest.contact_number,
+      email: participationRequest.email
     });
 
     // Update request status

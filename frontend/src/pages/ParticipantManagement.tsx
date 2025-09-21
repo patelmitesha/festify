@@ -12,6 +12,7 @@ interface ParticipationRequest {
   contact_number?: string;
   email?: string;
   message?: string;
+  coupon_bookings?: string; // JSON string containing coupon booking details
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
 }
@@ -278,6 +279,28 @@ const ParticipantManagement: React.FC = () => {
     }
   };
 
+  // Helper function to parse and display coupon bookings
+  const parseCouponBookings = (couponBookingsString?: string) => {
+    if (!couponBookingsString || !event) return [];
+
+    try {
+      const bookings = JSON.parse(couponBookingsString);
+      return bookings.map((booking: any) => {
+        const rate = event.CouponRates?.find(r => r.rate_id === booking.rate_id);
+        const meal = event.MealChoices?.find(m => m.meal_id === booking.meal_id);
+        return {
+          ...booking,
+          rate_type: rate?.rate_type || 'Unknown',
+          price: rate?.price || '0',
+          meal_type: meal?.meal_type || 'Unknown'
+        };
+      });
+    } catch (error) {
+      console.error('Error parsing coupon bookings:', error);
+      return [];
+    }
+  };
+
   if (isLoading) {
     return (
       <Layout>
@@ -384,6 +407,44 @@ const ParticipantManagement: React.FC = () => {
                             minute: '2-digit'
                           })}
                         </div>
+
+                        {/* Coupon Bookings Section */}
+                        {request.coupon_bookings && (() => {
+                          const bookings = parseCouponBookings(request.coupon_bookings);
+                          if (bookings.length === 0) return null;
+
+                          const totalAmount = bookings.reduce((sum: number, booking: any) => sum + (parseFloat(booking.price) * booking.quantity), 0);
+
+                          return (
+                            <div className="md:col-span-2">
+                              <span className="font-medium">Requested Coupons:</span>
+                              <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                <div className="space-y-2">
+                                  {bookings.map((booking: any, index: number) => (
+                                    <div key={index} className="flex justify-between items-center text-sm">
+                                      <div className="flex-1">
+                                        <span className="font-medium">{booking.quantity}x</span>{' '}
+                                        <span className="text-gray-700">{booking.meal_type}</span>{' '}
+                                        <span className="text-gray-600">({booking.rate_type})</span>
+                                      </div>
+                                      <div className="text-right">
+                                        <span className="font-medium">₹{booking.price}</span>
+                                        <span className="text-gray-500"> each</span>
+                                        <div className="text-xs text-gray-600">
+                                          Total: ₹{(parseFloat(booking.price) * booking.quantity).toLocaleString()}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="mt-3 pt-2 border-t border-blue-300 flex justify-between items-center">
+                                  <span className="font-semibold text-blue-900">Total Amount:</span>
+                                  <span className="font-bold text-blue-900 text-lg">₹{totalAmount.toLocaleString()}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                     <div className="flex flex-col space-y-2 ml-4">

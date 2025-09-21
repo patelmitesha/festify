@@ -10,6 +10,7 @@ export interface ParticipationRequestAttributes {
   contact_number?: string;
   email?: string;
   message?: string;
+  coupon_bookings?: string; // JSON string for coupon bookings
   status: 'pending' | 'approved' | 'rejected';
   created_at?: Date;
   updated_at?: Date;
@@ -23,6 +24,7 @@ class ParticipationRequest extends Model<ParticipationRequestAttributes> impleme
   public contact_number?: string;
   public email?: string;
   public message?: string;
+  public coupon_bookings?: string; // JSON string for coupon bookings
   public status!: 'pending' | 'approved' | 'rejected';
   public created_at!: Date;
   public updated_at!: Date;
@@ -63,6 +65,10 @@ ParticipationRequest.init(
       allowNull: true,
     },
     message: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    coupon_bookings: {
       type: DataTypes.TEXT,
       allowNull: true,
     },
