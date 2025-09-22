@@ -359,6 +359,17 @@ const CouponRedemption: React.FC = () => {
             <p className="text-gray-600 mt-1">
               {event?.name} - Search by QR code or phone number
             </p>
+            <div className="mt-2 flex items-center space-x-2">
+              <span className="text-sm font-medium text-blue-700">Current Date:</span>
+              <span className="text-sm text-blue-900 bg-blue-50 px-2 py-1 rounded">
+                {new Date().toLocaleDateString('en-GB', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -498,31 +509,58 @@ const CouponRedemption: React.FC = () => {
                 </div>
 
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-4">
-                  <div>
-                    <span className="text-sm font-medium text-gray-700">Status: </span>
-                    <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                      foundCoupon.status === 'Booked' ? 'bg-green-100 text-green-800' :
-                      foundCoupon.status === 'Partial' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
-                      {foundCoupon.status}
-                    </span>
+                  <div className="flex items-center space-x-4">
+                    <div>
+                      <span className="text-sm font-medium text-gray-700">Overall Status: </span>
+                      <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                        foundCoupon.status === 'Booked' ? 'bg-green-100 text-green-800' :
+                        foundCoupon.status === 'Partial' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {foundCoupon.status}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium text-gray-700">Today: </span>
+                      <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                        (foundCoupon as any).today_redeemed ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                      }`}>
+                        {(foundCoupon as any).today_redeemed ? 'Redeemed' : 'Available'}
+                      </span>
+                    </div>
                   </div>
                   <div className="text-sm text-gray-600">
                     <strong>Usage:</strong> {foundCoupon.consumed_count} / {foundCoupon.total_count} used
                   </div>
                 </div>
 
-                {foundCoupon.status !== 'Consumed' && (
-                  <div className="flex justify-center">
+                <div className="flex justify-center">
+                  {(foundCoupon as any).can_redeem_today ? (
                     <button
                       onClick={() => redeemCoupon(foundCoupon, 1)}
                       className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors font-medium"
                     >
-                      Redeem This Coupon
+                      Redeem for Today
                     </button>
-                  </div>
-                )}
+                  ) : (
+                    <div className="text-center">
+                      <button
+                        disabled
+                        className="px-6 py-2 bg-gray-400 text-white rounded-md cursor-not-allowed font-medium"
+                      >
+                        {(foundCoupon as any).today_redeemed ? 'Already Redeemed Today' : 'Cannot Redeem'}
+                      </button>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {(foundCoupon as any).today_redeemed
+                          ? 'This coupon has been used for today'
+                          : (foundCoupon as any).is_within_event_dates === false
+                            ? `Event runs from ${(foundCoupon as any).event_start_date} to ${(foundCoupon as any).event_end_date}`
+                            : 'Check overall status above'
+                        }
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -561,16 +599,30 @@ const CouponRedemption: React.FC = () => {
                                 </div>
                               </div>
 
-                              {coupon.status !== 'Consumed' && (
-                                <div className="flex items-center ml-4">
+                              <div className="flex items-center ml-4">
+                                {(coupon as any).can_redeem_today ? (
                                   <button
                                     onClick={() => redeemCoupon(coupon, 1)}
                                     className="px-4 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors font-medium"
                                   >
-                                    Redeem
+                                    Redeem Today
                                   </button>
-                                </div>
-                              )}
+                                ) : (
+                                  <div className="text-center">
+                                    <button
+                                      disabled
+                                      className="px-4 py-1 text-sm bg-gray-400 text-white rounded cursor-not-allowed font-medium"
+                                    >
+                                      {(coupon as any).today_redeemed ? 'Used Today' : 'Cannot Redeem'}
+                                    </button>
+                                    {(coupon as any).is_within_event_dates === false && (
+                                      <div className="text-xs text-gray-500 mt-1">
+                                        Event: {(coupon as any).event_start_date} to {(coupon as any).event_end_date}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
                         ))}

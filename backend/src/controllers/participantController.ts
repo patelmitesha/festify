@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { Event, Participant, Coupon, CouponRate, MealChoice, User, EventRepresentative } from '../models';
+import { Event, Participant, Coupon, CouponRate, MealChoice, User, EventRepresentative, Redemption } from '../models';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { generateCouponId, generateQRCode } from '../utils/qr';
 import PDFDocument from 'pdfkit';
@@ -69,6 +69,11 @@ export const addParticipant = async (req: AuthenticatedRequest, res: Response): 
       contact_number,
     });
 
+    // Calculate event duration for total_count
+    const eventStartDate = new Date(event.start_date);
+    const eventEndDate = new Date(event.end_date);
+    const eventDurationDays = Math.ceil((eventEndDate.getTime() - eventStartDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
     const coupons = [];
     for (const booking of coupon_bookings) {
       for (let i = 0; i < booking.quantity; i++) {
@@ -84,7 +89,7 @@ export const addParticipant = async (req: AuthenticatedRequest, res: Response): 
           qr_code_link: qrCodeLink,
           status: 'Booked',
           consumed_count: 0,
-          total_count: 1,
+          total_count: eventDurationDays,
         });
 
         coupons.push(coupon);
@@ -276,7 +281,43 @@ export const searchParticipantsByPhone = async (req: AuthenticatedRequest, res: 
       order: [['name', 'ASC']]
     });
 
-    res.json(participants);
+    // Add today's redemption status to each coupon
+    const today = new Date().toISOString().split('T')[0]; // Format as YYYY-MM-DD
+
+    const participantsWithTodayStatus = await Promise.all(participants.map(async (participant) => {
+      const participantData = participant.toJSON() as any;
+
+      if (participantData.Coupons) {
+        participantData.Coupons = await Promise.all(participantData.Coupons.map(async (coupon: any) => {
+          // Check if this coupon has been redeemed today
+          const todayRedemption = await Redemption.findOne({
+            where: {
+              coupon_id: coupon.coupon_id,
+              redemption_date: today
+            }
+          });
+
+          // Check if today is within the event's date range
+          const eventStartDate = event.start_date ? new Date(event.start_date).toISOString().split('T')[0] : today;
+          const eventEndDate = event.end_date ? new Date(event.end_date).toISOString().split('T')[0] : today;
+          const isWithinEventDates = today >= eventStartDate && today <= eventEndDate;
+
+          return {
+            ...coupon,
+            today_redeemed: !!todayRedemption,
+            today_redemption_date: today,
+            can_redeem_today: !todayRedemption && coupon.status !== 'Consumed' && isWithinEventDates,
+            event_start_date: eventStartDate,
+            event_end_date: eventEndDate,
+            is_within_event_dates: isWithinEventDates
+          };
+        }));
+      }
+
+      return participantData;
+    }));
+
+    res.json(participantsWithTodayStatus);
   } catch (error) {
     console.error('Search participants error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -554,6 +595,11 @@ export const addCouponToParticipant = async (req: AuthenticatedRequest, res: Res
       return;
     }
 
+    // Calculate event duration for total_count
+    const eventStartDate = new Date(event.start_date);
+    const eventEndDate = new Date(event.end_date);
+    const eventDurationDays = Math.ceil((eventEndDate.getTime() - eventStartDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
     const coupons = [];
     for (let i = 0; i < quantity; i++) {
       const qrCodeValue = generateCouponId();
@@ -568,7 +614,7 @@ export const addCouponToParticipant = async (req: AuthenticatedRequest, res: Res
         qr_code_link: qrCodeLink,
         status: 'Booked',
         consumed_count: 0,
-        total_count: 1,
+        total_count: eventDurationDays,
       });
 
       coupons.push(coupon);

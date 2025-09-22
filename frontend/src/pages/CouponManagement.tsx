@@ -390,6 +390,50 @@ _Powered by Festify_`;
                           </div>
                         </div>
 
+                        {/* Date-wise Redemption Status */}
+                        {(coupon as any).event_days && (coupon as any).event_days.length > 1 && (
+                          <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                            <div className="text-sm font-medium text-gray-700 mb-3">
+                              📅 Date-wise Redemption Status
+                            </div>
+                            <div className="grid grid-cols-7 gap-1">
+                              {(coupon as any).event_days.map((day: any, index: number) => (
+                                <div
+                                  key={day.date}
+                                  className={`text-center p-2 rounded text-xs ${
+                                    day.is_redeemed
+                                      ? 'bg-green-100 text-green-800 border border-green-200'
+                                      : 'bg-white text-gray-600 border border-gray-200'
+                                  }`}
+                                  title={`${day.date} - ${day.is_redeemed ? 'Redeemed' : 'Not redeemed'} ${
+                                    day.redemption_time ? `at ${new Date(day.redemption_time).toLocaleTimeString()}` : ''
+                                  }`}
+                                >
+                                  <div className="font-medium">{day.day_name}</div>
+                                  <div className="text-xs">{day.day_number}</div>
+                                  <div className="mt-1">
+                                    {day.is_redeemed ? (
+                                      <div className="w-2 h-2 bg-green-500 rounded-full mx-auto"></div>
+                                    ) : (
+                                      <div className="w-2 h-2 bg-gray-300 rounded-full mx-auto"></div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-2 text-xs text-gray-500 flex items-center space-x-4">
+                              <div className="flex items-center space-x-1">
+                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                <span>Redeemed</span>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
+                                <span>Not redeemed</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                         <p className="text-xs text-gray-500 mt-2">
                           Created: {new Date(coupon.created_at).toLocaleDateString()} at {new Date(coupon.created_at).toLocaleTimeString()}
                         </p>

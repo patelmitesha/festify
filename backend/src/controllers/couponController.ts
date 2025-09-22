@@ -117,7 +117,32 @@ export const getCouponByQR = async (req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    res.json({ coupon });
+    // Check if coupon has been redeemed for today's date
+    const today = new Date().toISOString().split('T')[0]; // Format as YYYY-MM-DD
+    const todayRedemption = await Redemption.findOne({
+      where: {
+        coupon_id: coupon.coupon_id,
+        redemption_date: today
+      }
+    });
+
+    // Check if today is within the event's date range
+    const eventStartDate = coupon.Event?.start_date ? new Date(coupon.Event.start_date).toISOString().split('T')[0] : today;
+    const eventEndDate = coupon.Event?.end_date ? new Date(coupon.Event.end_date).toISOString().split('T')[0] : today;
+    const isWithinEventDates = today >= eventStartDate && today <= eventEndDate;
+
+    // Add today's redemption status to the coupon data
+    const couponWithTodayStatus = {
+      ...coupon.toJSON(),
+      today_redeemed: !!todayRedemption,
+      today_redemption_date: today,
+      can_redeem_today: !todayRedemption && coupon.status !== 'Consumed' && isWithinEventDates,
+      event_start_date: eventStartDate,
+      event_end_date: eventEndDate,
+      is_within_event_dates: isWithinEventDates
+    };
+
+    res.json({ coupon: couponWithTodayStatus });
   } catch (error) {
     console.error('Get coupon by QR error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -460,7 +485,46 @@ export const getEventCoupons = async (req: AuthenticatedRequest, res: Response):
       order: [['created_at', 'DESC']]
     });
 
-    res.json({ coupons });
+    // Fetch redemption history for all coupons and add date-wise status
+    const couponsWithRedemptions = await Promise.all(coupons.map(async (coupon) => {
+      const redemptions = await Redemption.findAll({
+        where: { coupon_id: coupon.coupon_id },
+        order: [['redemption_date', 'ASC']]
+      });
+
+      // Generate event days array with redemption status
+      const eventStart = new Date(event.start_date);
+      const eventEnd = new Date(event.end_date);
+      const eventDays = [];
+
+      for (let d = new Date(eventStart); d <= eventEnd; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0];
+        const redemption = redemptions.find(r => {
+          const rDate = r.redemption_date instanceof Date ? r.redemption_date.toISOString().split('T')[0] : r.redemption_date;
+          return rDate === dateStr;
+        });
+
+        eventDays.push({
+          date: dateStr,
+          day_name: d.toLocaleDateString('en-US', { weekday: 'short' }),
+          day_number: d.getDate(),
+          is_redeemed: !!redemption,
+          redemption_time: redemption?.redeemed_at || null
+        });
+      }
+
+      return {
+        ...coupon.toJSON(),
+        event_days: eventDays,
+        redemption_history: redemptions.map(r => ({
+          redemption_date: r.redemption_date,
+          redeemed_count: r.redeemed_count,
+          redeemed_at: r.redeemed_at
+        }))
+      };
+    }));
+
+    res.json({ coupons: couponsWithRedemptions });
   } catch (error) {
     console.error('Get event coupons error:', error);
     res.status(500).json({ error: 'Internal server error' });
