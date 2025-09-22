@@ -10,17 +10,8 @@ const EventDetails: React.FC = () => {
   const [event, setEvent] = useState<Event | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [updateSuccess, setUpdateSuccess] = useState(false);
-  const [showSuccessToast, setShowSuccessToast] = useState(false);
-  const [editFormData, setEditFormData] = useState({
-    name: '',
-    description: '',
-    venue: '',
-    start_date: '',
-    end_date: ''
-  });
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (eventId) {
@@ -34,15 +25,6 @@ const EventDetails: React.FC = () => {
       const response = await api.get(`/events/${eventId}`);
       const eventData = response.data.event;
       setEvent(eventData);
-
-      // Initialize edit form data
-      setEditFormData({
-        name: eventData.name || '',
-        description: eventData.description || '',
-        venue: eventData.venue || '',
-        start_date: formatDateForInput(eventData.start_date),
-        end_date: formatDateForInput(eventData.end_date)
-      });
     } catch (err: any) {
       if (err.response?.status === 404) {
         setError('Event not found');
@@ -56,106 +38,18 @@ const EventDetails: React.FC = () => {
 
   const handleDeleteEvent = async () => {
     if (!event) return;
-
-    const confirmed = window.confirm('Are you sure you want to delete this event? This action cannot be undone.');
-    if (!confirmed) return;
+    setIsDeleting(true);
 
     try {
       await api.delete(`/events/${event.event_id}`);
-      navigate('/');
+      setShowDeleteModal(false);
+      navigate('/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to delete event');
+      setIsDeleting(false);
     }
   };
 
-  const formatDateForInput = (dateString: string) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    // Adjust for timezone offset to show local time
-    const offsetMs = date.getTimezoneOffset() * 60 * 1000;
-    const localDate = new Date(date.getTime() - offsetMs);
-    return localDate.toISOString().slice(0, 16);
-  };
-
-  const handleEditEvent = () => {
-    // Ensure form is pre-filled with current event data
-    if (event) {
-      const formData = {
-        name: event.name || '',
-        description: event.description || '',
-        venue: event.venue || '',
-        start_date: formatDateForInput(event.start_date),
-        end_date: formatDateForInput(event.end_date)
-      };
-
-      console.log('Setting edit form data:', formData);
-      setEditFormData(formData);
-    }
-    setIsEditModalOpen(true);
-  };
-
-  const handleCloseEditModal = () => {
-    setIsEditModalOpen(false);
-    setError('');
-    setUpdateSuccess(false);
-  };
-
-  const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setEditFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleUpdateEvent = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!event) return;
-
-    setIsUpdating(true);
-    setError('');
-    setUpdateSuccess(false);
-
-    try {
-      const response = await api.put(`/events/${event.event_id}`, editFormData);
-      const updatedEvent = response.data.event;
-      setEvent(updatedEvent);
-
-      // Update the form data with the latest event data
-      setEditFormData({
-        name: updatedEvent.name || '',
-        description: updatedEvent.description || '',
-        venue: updatedEvent.venue || '',
-        start_date: formatDateForInput(updatedEvent.start_date),
-        end_date: formatDateForInput(updatedEvent.end_date)
-      });
-
-      setUpdateSuccess(true);
-
-      // Show success toast and close modal after a short delay
-      setShowSuccessToast(true);
-
-      // Force refresh the event data to ensure UI shows latest data
-      if (eventId) {
-        fetchEvent();
-      }
-
-      setTimeout(() => {
-        setIsEditModalOpen(false);
-        setUpdateSuccess(false);
-      }, 2000);
-
-      // Hide toast after 5 seconds
-      setTimeout(() => {
-        setShowSuccessToast(false);
-      }, 5000);
-
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to update event');
-    } finally {
-      setIsUpdating(false);
-    }
-  };
 
   if (isLoading) {
     return (
@@ -173,7 +67,7 @@ const EventDetails: React.FC = () => {
         <div className="text-center py-12">
           <div className="text-red-600 text-lg mb-4">{error}</div>
           <Link
-            to="/"
+            to="/dashboard"
             className="text-blue-600 hover:text-blue-500"
           >
             Back to Dashboard
@@ -189,7 +83,7 @@ const EventDetails: React.FC = () => {
         <div className="text-center py-12">
           <div className="text-gray-500 text-lg mb-4">Event not found</div>
           <Link
-            to="/"
+            to="/dashboard"
             className="text-blue-600 hover:text-blue-500"
           >
             Back to Dashboard
@@ -210,12 +104,12 @@ const EventDetails: React.FC = () => {
             )}
           </div>
           <div className="flex space-x-3">
-            <button
-              onClick={handleEditEvent}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            <Link
+              to={`/events/create?edit=${event.event_id}`}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors inline-block"
             >
               Edit Event
-            </button>
+            </Link>
             <Link
               to={`/events/${event.event_id}/participants`}
               className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
@@ -223,7 +117,7 @@ const EventDetails: React.FC = () => {
               Manage Participants
             </Link>
             <button
-              onClick={handleDeleteEvent}
+              onClick={() => setShowDeleteModal(true)}
               className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
             >
               Delete Event
@@ -275,6 +169,46 @@ const EventDetails: React.FC = () => {
           </div>
         </div>
 
+        {/* Food Options Section */}
+        {event.MealChoices && event.MealChoices.length > 0 && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">🍽️ Food Options</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {event.MealChoices.map((meal: any, index: number) => (
+                <div
+                  key={index}
+                  className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-center"
+                >
+                  <span className="text-green-800 font-medium">{meal.meal_type}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Coupon Pricing Section */}
+        {event.CouponRates && event.CouponRates.length > 0 && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">💰 Coupon Pricing</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {event.CouponRates.map((rate: any, index: number) => (
+                <div
+                  key={index}
+                  className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex justify-between items-center"
+                >
+                  <div>
+                    <h3 className="font-medium text-blue-900">{rate.rate_type}</h3>
+                    <p className="text-sm text-blue-700">Per coupon</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-2xl font-bold text-blue-800">₹{rate.price}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
 
@@ -315,7 +249,7 @@ const EventDetails: React.FC = () => {
 
         <div className="flex justify-between">
           <Link
-            to="/"
+            to="/dashboard"
             className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
           >
             ← Back to Dashboard
@@ -326,147 +260,68 @@ const EventDetails: React.FC = () => {
           </div>
         </div>
 
-        {/* Edit Event Modal */}
-        {isEditModalOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-              <form onSubmit={handleUpdateEvent}>
-                <div className="px-6 py-4 border-b border-gray-200">
-                  <h3 className="text-lg font-semibold text-gray-900">Edit Event Details</h3>
+      </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <div className="flex items-center mb-4">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mr-4">
+                  <span className="text-2xl">⚠️</span>
                 </div>
-
-                <div className="p-6 space-y-4">
-                  {error && (
-                    <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
-                      {error}
-                    </div>
-                  )}
-
-                  {updateSuccess && (
-                    <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-lg text-sm">
-                      ✅ Event updated successfully! The page will refresh with the latest data.
-                    </div>
-                  )}
-
-                  <div>
-                    <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                      Event Name *
-                    </label>
-                    <input
-                      type="text"
-                      id="name"
-                      name="name"
-                      value={editFormData.name}
-                      onChange={handleEditFormChange}
-                      required
-                      disabled={updateSuccess}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                      placeholder="Enter event name"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                      Description
-                    </label>
-                    <textarea
-                      id="description"
-                      name="description"
-                      value={editFormData.description}
-                      onChange={handleEditFormChange}
-                      rows={3}
-                      disabled={updateSuccess}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
-                      placeholder="Enter event description"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="venue" className="block text-sm font-medium text-gray-700 mb-2">
-                      Venue
-                    </label>
-                    <input
-                      type="text"
-                      id="venue"
-                      name="venue"
-                      value={editFormData.venue}
-                      onChange={handleEditFormChange}
-                      disabled={updateSuccess}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                      placeholder="Enter venue"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="start_date" className="block text-sm font-medium text-gray-700 mb-2">
-                      Start Date & Time *
-                    </label>
-                    <input
-                      type="datetime-local"
-                      id="start_date"
-                      name="start_date"
-                      value={editFormData.start_date}
-                      onChange={handleEditFormChange}
-                      required
-                      disabled={updateSuccess}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="end_date" className="block text-sm font-medium text-gray-700 mb-2">
-                      End Date & Time *
-                    </label>
-                    <input
-                      type="datetime-local"
-                      id="end_date"
-                      name="end_date"
-                      value={editFormData.end_date}
-                      onChange={handleEditFormChange}
-                      required
-                      disabled={updateSuccess}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    />
-                  </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Delete Event</h3>
+                  <p className="text-sm text-gray-600">This action cannot be undone</p>
                 </div>
+              </div>
 
-                <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3">
-                  <button
-                    type="button"
-                    onClick={handleCloseEditModal}
-                    disabled={isUpdating}
-                    className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {updateSuccess ? 'Close' : 'Cancel'}
-                  </button>
-                  {!updateSuccess && (
-                    <button
-                      type="submit"
-                      disabled={isUpdating}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isUpdating ? 'Updating...' : 'Update Event'}
-                    </button>
-                  )}
+              <div className="mb-6">
+                <p className="text-gray-700 mb-3">
+                  Are you sure you want to delete <strong>"{event?.name}"</strong>?
+                </p>
+
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <p className="text-red-800 font-medium mb-2">This will permanently delete:</p>
+                  <ul className="text-red-700 text-sm space-y-1">
+                    <li>• All participant details and records</li>
+                    <li>• All generated coupons and QR codes</li>
+                    <li>• All redemption history</li>
+                    <li>• All participation requests</li>
+                    <li>• All event representatives</li>
+                    <li>• All meal choices and pricing information</li>
+                  </ul>
                 </div>
-              </form>
-            </div>
-          </div>
-        )}
+              </div>
 
-        {/* Success Toast */}
-        {showSuccessToast && (
-          <div className="fixed top-4 right-4 z-50 transform transition-all duration-300 ease-in-out">
-            <div className="bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg flex items-center space-x-3">
-              <span className="text-xl">✅</span>
-              <div>
-                <div className="font-semibold">Event Updated Successfully!</div>
-                <div className="text-sm text-green-100">The event details have been saved and are now visible on this page.</div>
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={isDeleting}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteEvent}
+                  disabled={isDeleting}
+                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                >
+                  {isDeleting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete Event'
+                  )}
+                </button>
               </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </Layout>
   );
 };

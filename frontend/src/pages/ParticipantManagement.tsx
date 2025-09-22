@@ -30,12 +30,16 @@ const ParticipantManagement: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     address: '',
-    contact_number: ''
+    contact_number: '',
+    email: ''
   });
   const [couponBookings, setCouponBookings] = useState<{rate_id: number, meal_id: number, quantity: number}[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCouponForm, setShowCouponForm] = useState<{[key: number]: boolean}>({});
   const [couponFormData, setCouponFormData] = useState<{[key: number]: {rate_id: number, meal_id: number, quantity: number}}>({});
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectionRequestId, setRejectionRequestId] = useState<number | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   useEffect(() => {
     if (eventId) {
@@ -98,10 +102,22 @@ const ParticipantManagement: React.FC = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+
+    // Validate contact number to only allow digits and limit to 10 digits
+    if (name === 'contact_number') {
+      const digitsOnly = value.replace(/\D/g, ''); // Remove all non-digits
+      if (digitsOnly.length <= 10) {
+        setFormData(prev => ({
+          ...prev,
+          [name]: digitsOnly
+        }));
+      }
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
 
   const addCouponBooking = () => {
@@ -130,6 +146,11 @@ const ParticipantManagement: React.FC = () => {
     e.preventDefault();
     if (!eventId) return;
 
+    if (!formData.contact_number || formData.contact_number.length !== 10) {
+      setError('Please enter a valid 10-digit contact number');
+      return;
+    }
+
     if (couponBookings.length === 0) {
       setError('Please add at least one coupon booking');
       return;
@@ -149,7 +170,7 @@ const ParticipantManagement: React.FC = () => {
         setParticipants(prev => [...prev, response.data]);
       }
 
-      setFormData({ name: '', address: '', contact_number: '' });
+      setFormData({ name: '', address: '', contact_number: '', email: '' });
       setCouponBookings([]);
       setShowAddForm(false);
       setError(''); // Clear any previous errors
@@ -279,6 +300,25 @@ const ParticipantManagement: React.FC = () => {
     }
   };
 
+  const openRejectModal = (requestId: number) => {
+    setRejectionRequestId(requestId);
+    setRejectionReason('');
+    setShowRejectModal(true);
+  };
+
+  const closeRejectModal = () => {
+    setShowRejectModal(false);
+    setRejectionRequestId(null);
+    setRejectionReason('');
+  };
+
+  const confirmReject = async () => {
+    if (rejectionRequestId) {
+      await handleRejectRequest(rejectionRequestId, rejectionReason || undefined);
+      closeRejectModal();
+    }
+  };
+
   // Helper function to parse and display coupon bookings
   const parseCouponBookings = (couponBookingsString?: string) => {
     if (!couponBookingsString || !event) return [];
@@ -317,7 +357,7 @@ const ParticipantManagement: React.FC = () => {
         <div className="text-center py-12">
           <div className="text-red-600 text-lg mb-4">{error}</div>
           <Link
-            to="/"
+            to="/dashboard"
             className="text-blue-600 hover:text-blue-500"
           >
             Back to Dashboard
@@ -455,10 +495,7 @@ const ParticipantManagement: React.FC = () => {
                         Approve
                       </button>
                       <button
-                        onClick={() => {
-                          const reason = window.prompt('Reason for rejection (optional):');
-                          handleRejectRequest(request.request_id, reason || undefined);
-                        }}
+                        onClick={() => openRejectModal(request.request_id)}
                         className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm font-medium"
                       >
                         Reject
@@ -509,8 +546,23 @@ const ParticipantManagement: React.FC = () => {
               </div>
 
               <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  id="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter email address (optional)"
+                />
+              </div>
+
+              <div>
                 <label htmlFor="contact_number" className="block text-sm font-medium text-gray-700 mb-2">
-                  Contact Number
+                  Contact Number *
                 </label>
                 <input
                   type="tel"
@@ -518,9 +570,15 @@ const ParticipantManagement: React.FC = () => {
                   name="contact_number"
                   value={formData.contact_number}
                   onChange={handleInputChange}
+                  pattern="[0-9]{10}"
+                  maxLength={10}
+                  required
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter contact number (optional)"
+                  placeholder="Enter 10-digit contact number"
                 />
+                {formData.contact_number && formData.contact_number.length !== 10 && (
+                  <p className="text-sm text-red-600 mt-1">Contact number must be exactly 10 digits</p>
+                )}
               </div>
 
               {/* Coupon Bookings Section */}
@@ -599,7 +657,7 @@ const ParticipantManagement: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setShowAddForm(false);
-                    setFormData({ name: '', address: '', contact_number: '' });
+                    setFormData({ name: '', address: '', contact_number: '', email: '' });
                     setCouponBookings([]);
                     setError('');
                   }}
@@ -846,13 +904,64 @@ const ParticipantManagement: React.FC = () => {
           </Link>
 
           <Link
-            to="/"
+            to="/dashboard"
             className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
           >
             Back to Dashboard
           </Link>
         </div>
       </div>
+
+      {/* Rejection Modal */}
+      {showRejectModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <div className="flex items-center mb-4">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mr-4">
+                  <span className="text-2xl">❌</span>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Reject Participation Request</h3>
+                  <p className="text-sm text-gray-600">Please provide a reason for rejection</p>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <label htmlFor="rejectionReason" className="block text-sm font-medium text-gray-700 mb-2">
+                  Reason for Rejection
+                </label>
+                <textarea
+                  id="rejectionReason"
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
+                  placeholder="Enter the reason for rejecting this participation request (optional)..."
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  This reason will be visible to event organizers and may be communicated to the participant.
+                </p>
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={closeRejectModal}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmReject}
+                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                >
+                  Reject Request
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 };

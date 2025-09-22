@@ -342,7 +342,7 @@ const CouponRedemption: React.FC = () => {
       <Layout>
         <div className="text-center py-12">
           <div className="text-red-600 text-lg mb-4">{error}</div>
-          <Link to="/" className="text-blue-600 hover:text-blue-500">
+          <Link to="/dashboard" className="text-blue-600 hover:text-blue-500">
             Back to Dashboard
           </Link>
         </div>
@@ -646,7 +646,7 @@ const CouponRedemption: React.FC = () => {
           </Link>
 
           <Link
-            to="/"
+            to="/dashboard"
             className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
           >
             Back to Dashboard

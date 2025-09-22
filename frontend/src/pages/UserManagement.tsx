@@ -318,7 +318,7 @@ const UserManagement: React.FC = () => {
 
         <div className="flex justify-between">
           <Link
-            to="/"
+            to="/dashboard"
             className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
           >
             ← Back to Dashboard
